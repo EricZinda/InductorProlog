@@ -5,6 +5,7 @@
 //  Created by Eric Zinda on 10/2/18.
 //  Copyright © 2018 Eric Zinda. All rights reserved.
 //
+#include <algorithm>
 #include "FXPlatform/Utilities.h"
 #include "HtnArithmeticOperators.h"
 #include "HtnTerm.h"

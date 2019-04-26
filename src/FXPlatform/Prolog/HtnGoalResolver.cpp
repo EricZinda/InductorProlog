@@ -5,7 +5,7 @@
 //  Created by Eric Zinda on 9/29/18.
 //  Copyright © 2018 Eric Zinda. All rights reserved.
 //
-
+#include <algorithm>
 #include "Logger.h"
 #include "HtnArithmeticOperators.h"
 #include "HtnGoalResolver.h"
@@ -300,7 +300,7 @@ void ResolveState::RecordFailure(shared_ptr<HtnTerm> goal, int goalsLeftToProces
     FailFastAssert(originalGoalIndex >= 0 && originalGoalIndex < initialGoals->size());
     
     shared_ptr<HtnTerm> originalGoalInProgress = (*initialGoals)[originalGoalIndex];
-    int size = resolveStack->size();
+    int size = (int) resolveStack->size();
     if((originalGoalIndex != deepestFailureOriginalGoalIndex) || ((size >= deepestFailure) && (goal != nullptr)))
     {
         deepestFailure = size;
@@ -319,8 +319,8 @@ void ResolveState::RecordFailure(shared_ptr<HtnTerm> goal, int goalsLeftToProces
 int64_t ResolveState::RecordMemoryUsage(int64_t &initialTermMemory, int64_t &initialRuleSetMemory)
 {
     stackMemoryUsed = dynamicSize();
-    int currentTermMemory = termFactory->dynamicSize();
-    int currentRuleSetMemory = prog->dynamicSize();
+    int currentTermMemory = (int) termFactory->dynamicSize();
+    int currentRuleSetMemory = (int) prog->dynamicSize();
     
     termMemoryUsed += currentTermMemory - initialTermMemory;
     ruleMemoryUsed += currentRuleSetMemory - initialRuleSetMemory;
@@ -450,7 +450,7 @@ shared_ptr<vector<RuleBindingType>> HtnGoalResolver::FindAllRulesThatUnify(HtnTe
         int64_t memoryUsed = 0;
         
         bool foundRule = false;
-        int goalArgumentsSize = goal->arguments().size();
+        int goalArgumentsSize = (int) goal->arguments().size();
         prog->AllRules([&](const HtnRule &item)
         {
             // If we ran out of memory budget, return whatever we found
@@ -621,7 +621,7 @@ shared_ptr<UnifierType> HtnGoalResolver::ResolveNext(ResolveState *state)
     while(resolveStack->size() > 0)
     {
         // Always make progress on the deepest branch first, which is at the top of the stack
-        int indentLevel = initialIndent + resolveStack->size();
+        int indentLevel = (int) (initialIndent + resolveStack->size());
         shared_ptr<ResolveNode> currentNode = resolveStack->back();
 
         // Consistent place to check for memory used so it is checked regularly but not constantly
@@ -687,7 +687,7 @@ shared_ptr<UnifierType> HtnGoalResolver::ResolveNext(ResolveState *state)
                         {
                             // Not custom, just handle normally
                             int64_t FindAllRulesThatUnifyHighestMemory = 0;
-                            currentNode->rulesThatUnify = FindAllRulesThatUnify(termFactory, prog, goal, &uniquifier, indentLevel, memoryBudget - totalMemoryUsed, state->fullTrace, &FindAllRulesThatUnifyHighestMemory);
+                            currentNode->rulesThatUnify = FindAllRulesThatUnify(termFactory, prog, goal, &uniquifier, indentLevel, (int)(memoryBudget - totalMemoryUsed), state->fullTrace, &FindAllRulesThatUnifyHighestMemory);
                             state->highestMemoryUsed = std::max(state->highestMemoryUsed, totalMemoryUsed + FindAllRulesThatUnifyHighestMemory);
                             if(termFactory->outOfMemory())
                             {
@@ -921,7 +921,7 @@ void HtnGoalResolver::RuleCount(ResolveState *state)
             if(solutions != nullptr)
             {
                 // Count the solutions we found
-                count = solutions->size();
+                count = (int) solutions->size();
             }
             
             shared_ptr<HtnTerm> variable = goal->arguments()[0];
