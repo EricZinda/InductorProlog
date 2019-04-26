@@ -17,6 +17,7 @@ namespace Prolog
     class PrologList;
     
     extern char CrlfString[];
+	extern char CapitalChar[];
 
     class PrologSymbolID
     {
@@ -29,9 +30,10 @@ namespace Prolog
         SymbolDef(PrologDocument, CustomSymbolStart + 5);
         SymbolDef(PrologList, CustomSymbolStart + 6);
         SymbolDef(PrologComment, CustomSymbolStart + 7);
-        
+		SymbolDef(PrologQuery, CustomSymbolStart + 8);
+
         // Must be last so that other parsers can extend
-        SymbolDef(PrologMaxSymbol, CustomSymbolStart + 8);
+        SymbolDef(PrologMaxSymbol, CustomSymbolStart + 9);
     };
 
     //    a comment starts with % and can have anything after it until it hits a group of newline, carriage returns in any order and in any number
@@ -92,12 +94,33 @@ namespace Prolog
     {
     };
     
-    //    a variable starts with ? followed by an atom
-    class PrologVariable : public
+	class PrologCapitalizedAtom : public
         AndExpression<Args
         <
-            CharacterSymbol<QuestionMarkString, FlattenType::Delete>,
-            PrologAtom
+			CharacterSetSymbol<CapitalChar>,
+            ZeroOrMoreExpression
+            <
+                OrExpression<Args
+                <
+                    CharOrNumberSymbol,
+                    CharacterSymbol<Underscore, FlattenType::None>,
+                    CharacterSymbol<HyphenString, FlattenType::None>
+                >>
+            >
+        >, FlattenType::None, PrologSymbolID::PrologAtom>
+    {
+    };
+
+	// Variables start with a capital letter
+    // In this custom Prolog engine, a variable can also start with ? followed by any atom (I find it more readable).
+    class PrologVariable : public
+		OrExpression<Args<
+			AndExpression<Args
+			<
+				CharacterSymbol<QuestionMarkString, FlattenType::Delete>,
+				PrologAtom
+			>>,
+			PrologCapitalizedAtom
         >, FlattenType::None, PrologSymbolID::PrologVariable>
     {
     };
@@ -108,9 +131,28 @@ namespace Prolog
     <
         PrologFunctor,
         PrologList,
-        PrologAtom,
-        PrologVariable
+		PrologVariable,
+		PrologAtom
     >, FlattenType::Flatten>
+    {
+    };
+
+	class PrologFunctorList : public
+    AndExpression<Args
+    <
+        PrologFunctor,
+        PrologOptionalWhitespace,
+        ZeroOrMoreExpression
+        <
+            AndExpression<Args
+            <
+                CharacterSymbol<CommaString>,
+                PrologOptionalWhitespace,
+				PrologFunctor,
+                PrologOptionalWhitespace
+            >>
+        >
+    >>
     {
     };
 
@@ -187,6 +229,18 @@ namespace Prolog
     {
     };
     
+	class PrologQuery : public
+    AndExpression<Args<
+		PrologOptionalWhitespace,
+		PrologFunctorList,
+		PrologOptionalWhitespace,
+		CharacterSymbol<PeriodString>,
+		PrologOptionalWhitespace,
+        EofSymbol
+    >, FlattenType::None, PrologSymbolID::PrologQuery>
+    {
+    };
+
     class PrologDocument : public
     AndExpression<Args<
         OneOrMoreExpression

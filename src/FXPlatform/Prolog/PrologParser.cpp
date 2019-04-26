@@ -11,4 +11,5 @@
 namespace Prolog
 {
     char CrlfString[] = "\r\n";    
+	char CapitalChar[]= "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 }

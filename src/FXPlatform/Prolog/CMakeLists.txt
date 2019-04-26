@@ -14,6 +14,8 @@ target_sources(lib
     HtnTermFactory.cpp
     PrologCompiler.h
     PrologCompiler.cpp
+    PrologQueryCompiler.h
+    PrologQueryCompiler.cpp
     PrologParser.h
     PrologParser.cpp
 )

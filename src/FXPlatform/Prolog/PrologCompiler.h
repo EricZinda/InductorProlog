@@ -30,7 +30,6 @@ public:
     // Helper that creates a new ruleset and sets it instead of just clearing it.
     // Useful if the RuleSet has been locked
     void ClearWithNewRuleSet();
-    vector<shared_ptr<HtnTerm>> CompileQuery(const string &query);
     shared_ptr<vector<UnifierType>> SolveGoals()
     {
         HtnGoalResolver resolver;
