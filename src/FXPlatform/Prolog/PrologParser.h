@@ -15,9 +15,10 @@ namespace Prolog
 {
     class PrologFunctor;
     class PrologList;
-    
+	extern char BeginCommentBlock[];
     extern char CrlfString[];
 	extern char CapitalChar[];
+	extern char EndCommentBlock[];
 
     class PrologSymbolID
     {
@@ -37,16 +38,26 @@ namespace Prolog
     };
 
     //    a comment starts with % and can have anything after it until it hits a group of newline, carriage returns in any order and in any number
+	// or it is a block comment  /* comment */
     class PrologComment : public
-        AndExpression<Args
-        <
-            CharacterSymbol<PercentString, FlattenType::None>,
-            ZeroOrMoreExpression<CharacterSetExceptSymbol<CrlfString>>,
-            OneOrMoreExpression<CharacterSetSymbol<CrlfString>>
-        >, FlattenType::None, PrologSymbolID::PrologComment>
+		OrExpression<Args
+		<
+			AndExpression<Args
+			<
+				CharacterSymbol<PercentString, FlattenType::None>,
+				ZeroOrMoreExpression<CharacterSetExceptSymbol<CrlfString>>,
+				OneOrMoreExpression<CharacterSetSymbol<CrlfString>>
+			>>,
+			AndExpression<Args
+			<
+				LiteralExpression<BeginCommentBlock>,
+				NotLiteralExpression<EndCommentBlock>,
+				LiteralExpression<EndCommentBlock>
+			>>
+		>, FlattenType::None, PrologSymbolID::PrologComment>
     {
     };
-    
+
     // HtnWhitespace can have normal whitespace or a valid comment
     class PrologOptionalWhitespace : public
     ZeroOrMoreExpression
@@ -73,6 +84,15 @@ namespace Prolog
             <
                 MathSymbol
             >,
+            AndExpression<Args
+            <
+				CharacterSymbol<DoubleQuoteString>,
+				ZeroOrMoreExpression
+				<
+					CharacterSetExceptSymbol<DoubleQuoteString>
+				>,
+				CharacterSymbol<DoubleQuoteString>
+			>>,
             AndExpression<Args
             <
                 OrExpression<Args<
@@ -201,14 +221,20 @@ namespace Prolog
             PrologAtom,
             CharacterSymbol<PeriodString>
         >>,
-        CharacterSymbol<LeftParenthesisString>,
-        PrologOptionalWhitespace,
-        OptionalExpression
-        <
-            PrologTermList
-        >,
-        PrologOptionalWhitespace,
-        CharacterSymbol<RightParenthesisString>
+		OptionalExpression
+		<
+			AndExpression<Args
+			<
+				CharacterSymbol<LeftParenthesisString>,
+				PrologOptionalWhitespace,
+				OptionalExpression
+				<
+					PrologTermList
+				>,
+				PrologOptionalWhitespace,
+				CharacterSymbol<RightParenthesisString>
+			>>
+		>
     >, FlattenType::None, PrologSymbolID::PrologFunctor>
     {
     };
