@@ -1,6 +1,9 @@
 h:- dynamic my_location/1, object/2, path/3.
 
+
 /* TYPE START. TO BEGIN GAME */
+/* CREATED BY JORDAN ISAACS - 2019 */
+
 
 /* Places objects can be used */
 object_use(storageDoor,key).
