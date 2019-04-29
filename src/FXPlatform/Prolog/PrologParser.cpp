@@ -10,5 +10,8 @@
 
 namespace Prolog
 {
+	char BeginCommentBlock[] = "/*";
     char CrlfString[] = "\r\n";    
+	char CapitalChar[]= "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	char EndCommentBlock[] = "*/";
 }

@@ -4,11 +4,14 @@
 #include <stdlib.h>
 #include <string>
 #include "FXPlatform/Prolog/PrologCompiler.h"
+#include "FXPlatform/Prolog/PrologQueryCompiler.h"
 #include "FXPlatform/Prolog/HtnRuleSet.h"
 #include "FXPlatform/Prolog/HtnTermFactory.h"
 
 int main (int argc, char *argv[])
 {
+	SetTraceFilter(SystemTraceType::Parsing, TraceDetail::Diagnostic);
+
 	if(argc != 2)
 	{
 		  fprintf(stdout, 
@@ -29,19 +32,37 @@ int main (int argc, char *argv[])
     	PrologCompiler compiler(factory.get(), state.get());
     	if(compiler.CompileDocument(targetFileAndPath))
     	{
-    		fprintf(stdout, "Succesfully compiled %s\r\n\r\nType a Prolog query or hit ctrl-C to end.\r\n\r\n", targetFileAndPath.c_str());
+    		fprintf(stdout, "Succesfully compiled %s\r\n\r\nType a Prolog query or hit q to end.\r\n\r\n", targetFileAndPath.c_str());
     		fprintf(stdout, "?");
 
-	     //    HtnGoalResolver resolver;
-    		// string input;
-    		// vector<shared_ptr<HtnTerm>> query;
-    		// while(cin >> input)
-    		// {
-    		// 	resolver.ResolveAll(factory, state, query);
+			PrologQueryCompiler queryCompiler(factory.get());
+	        HtnGoalResolver resolver;
+			string input;
+			std::getline(cin, input);
+			while(true)
+			{
+				if (input == "q") break;
+				if(queryCompiler.Compile(input))
+				{
+					shared_ptr<vector<UnifierType>> queryResult = resolver.ResolveAll(factory.get(), state.get(), queryCompiler.result());
+					if (queryResult == nullptr)
+					{
+						fprintf(stdout, ">> false\r\n\r\n");
+					}
+					else
+					{
+						fprintf(stdout, ">> %s\r\n\r\n", HtnGoalResolver::ToString(queryResult.get()).c_str());
+					}
+				}
+				else
+				{
+					fprintf(stdout, "Error: %s\r\n\r\n", queryCompiler.GetErrorString().c_str());
+				}
 
-	    	// 	fprintf(stdout, ">> %s\r\n\r\n", input.c_str());	    		
-	    	// 	fprintf(stdout, "?");
-    		// }
+				queryCompiler.Clear();
+				fprintf(stdout, "?");
+				std::getline(cin, input);
+			}
     		return 0;
     	}
     	else
@@ -50,6 +71,4 @@ int main (int argc, char *argv[])
     		return 1;
     	}
 	}
-
-  	return 0;
 }

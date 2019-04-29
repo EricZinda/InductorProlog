@@ -44,7 +44,7 @@ class HtnTerm : public std::enable_shared_from_this<HtnTerm>
 public:
     ~HtnTerm();
     const std::vector<std::shared_ptr<HtnTerm>> &arguments() const { return m_arguments; }
-    int arity() const { return m_arguments.size(); }
+    int arity() const { return (int) m_arguments.size(); }
     int64_t dynamicSize();
     std::shared_ptr<HtnTerm> Eval(HtnTermFactory *factory);
     void GetAllVariables(std::vector<std::string> *result);

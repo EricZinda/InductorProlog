@@ -22,7 +22,7 @@ HtnTermFactory::HtnTermFactory() :
 
 void HtnTermFactory::BeginTracking(const string &key)
 {
-    m_termCreationTracking[key] = pair<int,int>(m_termsCreated, dynamicSize());
+    m_termCreationTracking[key] = pair<int,int>(m_termsCreated, (int) dynamicSize());
 }
 
 shared_ptr<HtnTerm> HtnTermFactory::CreateConstant(const string &name)
@@ -88,7 +88,7 @@ pair<int,int> HtnTermFactory::EndTracking(const string &key)
 {
     auto found = m_termCreationTracking.find(key);
     int termsCreated = m_termsCreated - found->second.first;
-    int memoryUsed = dynamicSize() - found->second.second;
+    int memoryUsed = (int)(dynamicSize() - found->second.second);
     m_termCreationTracking.erase(found);
     return pair<int,int>(termsCreated, memoryUsed);
 }
@@ -145,13 +145,13 @@ shared_ptr<HtnTerm> HtnTermFactory::GetInternedTerm(shared_ptr<HtnTerm> &term)
 
 void HtnTermFactory::RecordAllocation(HtnTerm *term)
 {
-    int size = term->dynamicSize();
+    int size = (int) term->dynamicSize();
     m_otherAllocations += size;
 }
 
 void HtnTermFactory::RecordDeallocation(HtnTerm *term)
 {
-    int size = term->dynamicSize();
+    int size = (int) term->dynamicSize();
     m_otherAllocations -= size;
     FailFastAssert(m_otherAllocations >= 0);
 }
@@ -165,9 +165,10 @@ void HtnTermFactory::ReleaseInternedString(const string *value)
         {
             m_stringAllocations -= sizeof(string) + value->size();
             FailFastAssert(m_stringAllocations >= 0);
-            delete found->first;
+			const std::string* temp = found->first;
             m_internedStrings.erase(found);
-        }
+			delete temp;
+		}
         else
         {
             found->second -= 1;
@@ -187,8 +188,9 @@ void HtnTermFactory::ReleaseInternedTerm(HtnTerm *term)
 
     InternedTermMap::iterator found = m_internedTerms.find(m_uniqueIDBuffer);
     FailFastAssert(found != m_internedTerms.end());
-    delete [] found->first;
+	const string** temp = found->first;
     m_internedTerms.erase(found);
+	delete[] temp;
 }
 
 shared_ptr<HtnTerm> HtnTermFactory::True()
@@ -196,7 +198,7 @@ shared_ptr<HtnTerm> HtnTermFactory::True()
     if(m_true == nullptr)
     {
         m_true = CreateConstant("true");
-    }
+    } 
     
     return m_true;
 }

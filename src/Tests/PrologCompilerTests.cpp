@@ -22,12 +22,6 @@ class ParserTestBase : public FXPlat::ParserDebug
 {
 };
 
-// Just here to make the linker load this library since it is all statics
-void LoadTests()
-{
-
-}
-
 SUITE(PrologCompilerTests)
 {
     TEST(PrologCompilerTests)

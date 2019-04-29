@@ -1,4 +1,4 @@
-target_sources(testLib
+target_sources(runtests
     PRIVATE
     	PrologCompilerTests.cpp
 )

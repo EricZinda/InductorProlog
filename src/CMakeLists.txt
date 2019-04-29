@@ -12,6 +12,7 @@ add_library(lib "")
 target_include_directories(indprolog PRIVATE ./)
 target_include_directories(lib PRIVATE ./)
 target_include_directories(testLib PRIVATE ./)
+target_include_directories(runtests PRIVATE ./)
 
 #### Prolog
 

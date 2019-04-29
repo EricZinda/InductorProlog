@@ -9,6 +9,7 @@
 #ifndef HtnGoalResolver_hpp
 #define HtnGoalResolver_hpp
 #include <map>
+#include <functional>
 #include "HtnRule.h"
 #include "HtnTerm.h"
 enum class ResolveContinuePoint;

@@ -41,3 +41,4 @@ target_sources(testLib
 		XmlTestReporter.h
 )
 target_include_directories(testLib PRIVATE ./)
+target_include_directories(runtests PRIVATE ./)
