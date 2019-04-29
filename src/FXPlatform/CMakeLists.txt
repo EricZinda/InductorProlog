@@ -10,3 +10,4 @@ target_sources(lib
     	Utilities.cpp
 )
 target_include_directories(lib PRIVATE ./)
+target_include_directories(testLib PRIVATE ./)
