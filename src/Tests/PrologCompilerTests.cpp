@@ -26,8 +26,8 @@ SUITE(PrologCompilerTests)
 {
     TEST(PrologCompilerTests)
     {
-        //                SetTraceFilter(SystemTraceType::Parsing, TraceDetail::Diagnostic);
-//        SetTraceLevelOfDetail(TraceDetail::Diagnostic);
+//                        SetTraceFilter(SystemTraceType::Parsing, TraceDetail::Diagnostic);
+        
         shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
         shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
         // shared_ptr<HtnPlanner> planner = shared_ptr<HtnPlanner>(new HtnPlanner());
@@ -83,118 +83,113 @@ SUITE(PrologCompilerTests)
         shared_ptr<Symbol> rule;
         vector<shared_ptr<Symbol>> flattenedTree;
         
-        //                        SetTraceFilter(SystemTraceType::Parsing, TraceDetail::Diagnostic);
+//        SetTraceFilter(SystemTraceType::Parsing, TraceDetail::Diagnostic);
         
         // atom
         rule = TestTryParse<PrologAtom>("constant", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologAtom>("con-stant", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologAtom>("con_stant", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologAtom>(">", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologAtom>(">=", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologAtom>("1", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologAtom>("+1", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologAtom>("-1", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologAtom>("1.2", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologAtom>("+1.2", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologAtom>("-1.2", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
-        
+
+
         // variable
         rule = TestTryParse<PrologVariable>("?a", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
-        
+
+
         // term
         rule = TestTryParse<PrologTerm>("a", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologTerm>("?a", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologTerm>("a(b)", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
-        
+
+
+        // term list
+        rule = TestTryParse<PrologTermList>("foo(a)", deepestFailure, errorMessage);
+        CHECK(rule != nullptr);
+
         // functor
         rule = TestTryParse<PrologFunctor>("a()", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologFunctor>("a(b)", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologFunctor>("-(b,c)", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologFunctor>("a(b,c)", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologFunctor>("a(?b,?c)", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologFunctor>("a( ?b , ?c )", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologFunctor>("a( d(e,f,g) , ?c )", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
-        rule = TestTryParse<PrologFunctor>("do([Move(?unit,?from,?to),SetEnergy(?energy,-(?energy,?moveCost))])", deepestFailure, errorMessage);
+
+        rule = TestTryParse<PrologFunctor>("do(Move(?unit,?from,?to),SetEnergy(?energy,-(?energy,?moveCost)))", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
-        
-        // list
-        rule = TestTryParse<PrologList>("[]", deepestFailure, errorMessage);
-        CHECK(rule != nullptr);
-        
-        rule = TestTryParse<PrologList>("[a]", deepestFailure, errorMessage);
-        CHECK(rule != nullptr);
-        
-        rule = TestTryParse<PrologList>("[a,b]", deepestFailure, errorMessage);
-        CHECK(rule != nullptr);
-        
-        rule = TestTryParse<PrologList>("[a,b(foo),?f]", deepestFailure, errorMessage);
-        CHECK(rule != nullptr);
-        
-        
+
         // rule
+        rule = TestTryParse<PrologRule>("a :- ", deepestFailure, errorMessage);
+        CHECK(rule != nullptr);
+
         rule = TestTryParse<PrologRule>("a(g) :- ", deepestFailure, errorMessage);
+        CHECK(rule != nullptr);
+
+        rule = TestTryParse<PrologRule>("a( g , ef ) :- ", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
         
         rule = TestTryParse<PrologRule>("a(g) :- b(c)", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologRule>("a(g) :- b(c), d(a,b,c)", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
         rule = TestTryParse<PrologRule>("a( g, ef) :- foo(a)", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
-        
+
+
         // Document
         rule = TestTryParse<PrologDocument>("a.  ", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
         
-        rule = TestTryParse<PrologDocument>("a( g, ef) :- foo(a).  ", deepestFailure, errorMessage);
+        rule = TestTryParse<PrologDocument>("a(g, ef) :- foo(a).", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
         
         rule = TestTryParse<PrologDocument>("a(g).  ", deepestFailure, errorMessage);
@@ -204,13 +199,13 @@ SUITE(PrologCompilerTests)
         CHECK(rule != nullptr);
         
         // Examples
-        rule = TestTryParse<PrologDocument>("operator(SetEnergy(?old,?new), del([Energy(?old)]), add([Energy(?new)]) ).", deepestFailure, errorMessage);
+        rule = TestTryParse<PrologDocument>("operator(SetEnergy(?old,?new), del(Energy(?old)), add(Energy(?new)) ).", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
         
-        rule = TestTryParse<PrologDocument>("goals([findSolution(a)]).", deepestFailure, errorMessage);
+        rule = TestTryParse<PrologDocument>("goals(findSolution(a)).", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
         
-        rule = TestTryParse<PrologDocument>("method(MoveUnit(?unit, ?to), if(UnitIdle(?unit),At(?unit,?from)),   do([Move(?unit,?from,?to),SetEnergy(?energy,-(?energy,?moveCost))]) ).", deepestFailure, errorMessage);
+        rule = TestTryParse<PrologDocument>("method(MoveUnit(?unit, ?to), if(UnitIdle(?unit),At(?unit,?from)),   do(Move(?unit,?from,?to),SetEnergy(?energy,-(?energy,?moveCost))) ).", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
         
         // Comment

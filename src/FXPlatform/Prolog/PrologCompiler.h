@@ -48,7 +48,6 @@ public:
 
     static shared_ptr<HtnTerm> CreateTermFromFunctor(HtnTermFactory *factory, shared_ptr<Symbol> functor);
     static shared_ptr<HtnTerm> CreateTermFromItem(HtnTermFactory *factory, shared_ptr<Symbol> symbol);
-    static shared_ptr<HtnTerm> CreateTermFromList(HtnTermFactory *factory, shared_ptr<Symbol> variable);
     static shared_ptr<HtnTerm> CreateTermFromVariable(HtnTermFactory *factory, shared_ptr<Symbol> variable);
     
     vector<shared_ptr<HtnTerm>> &goals() { return m_goals; }

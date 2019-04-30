@@ -14,7 +14,19 @@ using namespace FXPlat;
 namespace Prolog
 {
     class PrologFunctor;
-    class PrologList;
+    
+    // Errors
+    extern char PrologAtomError[];
+    extern char PrologVariableError[];
+    extern char PrologTermError[];
+    extern char PrologFunctorError[];
+    extern char PrologFunctorListError[];
+    extern char PrologRuleError[];
+    extern char PrologTermListError[];
+    extern char PrologDocumentError[];
+    extern char PrologCommentError[];
+    extern char PrologQueryError[];
+
 	extern char BeginCommentBlock[];
     extern char CrlfString[];
 	extern char CapitalChar[];
@@ -29,12 +41,11 @@ namespace Prolog
         SymbolDef(PrologFunctor, CustomSymbolStart + 3);
         SymbolDef(PrologRule, CustomSymbolStart + 4);
         SymbolDef(PrologDocument, CustomSymbolStart + 5);
-        SymbolDef(PrologList, CustomSymbolStart + 6);
-        SymbolDef(PrologComment, CustomSymbolStart + 7);
-		SymbolDef(PrologQuery, CustomSymbolStart + 8);
+        SymbolDef(PrologComment, CustomSymbolStart + 6);
+		SymbolDef(PrologQuery, CustomSymbolStart + 7);
 
         // Must be last so that other parsers can extend
-        SymbolDef(PrologMaxSymbol, CustomSymbolStart + 9);
+        SymbolDef(PrologMaxSymbol, CustomSymbolStart + 8);
     };
 
     //    a comment starts with % and can have anything after it until it hits a group of newline, carriage returns in any order and in any number
@@ -54,7 +65,7 @@ namespace Prolog
 				NotLiteralExpression<EndCommentBlock>,
 				LiteralExpression<EndCommentBlock>
 			>>
-		>, FlattenType::None, PrologSymbolID::PrologComment>
+		>, FlattenType::None, PrologSymbolID::PrologComment, PrologCommentError>
     {
     };
 
@@ -110,7 +121,7 @@ namespace Prolog
                     >>
                 >
             >>
-        >, FlattenType::None, PrologSymbolID::PrologAtom>
+        >, FlattenType::None, PrologSymbolID::PrologAtom, PrologAtomError>
     {
     };
     
@@ -127,7 +138,7 @@ namespace Prolog
                     CharacterSymbol<HyphenString, FlattenType::None>
                 >>
             >
-        >, FlattenType::None, PrologSymbolID::PrologAtom>
+        >, FlattenType::None, PrologSymbolID::PrologAtom, PrologAtomError>
     {
     };
 
@@ -141,19 +152,17 @@ namespace Prolog
 				PrologAtom
 			>>,
 			PrologCapitalizedAtom
-        >, FlattenType::None, PrologSymbolID::PrologVariable>
+        >, FlattenType::None, PrologSymbolID::PrologVariable, PrologVariableError>
     {
     };
 
-    // A term is an atom, variable or functor
+    // A term is a variable or functor (which could have no arguments and thus be an atom)
     class PrologTerm : public
     OrExpression<Args
     <
         PrologFunctor,
-        PrologList,
-		PrologVariable,
-		PrologAtom
-    >, FlattenType::Flatten>
+		PrologVariable
+    >, FlattenType::Flatten, 0, PrologTermError>
     {
     };
 
@@ -172,7 +181,7 @@ namespace Prolog
                 PrologOptionalWhitespace
             >>
         >
-    >>
+    >, FlattenType::Flatten, SymbolID::andExpression, PrologFunctorListError>
     {
     };
 
@@ -191,48 +200,36 @@ namespace Prolog
                 PrologOptionalWhitespace
             >>
         >
-    >>
-    {
-    };
-    
-    class PrologList : public
-    AndExpression<Args
-    <
-        CharacterSymbol<LeftBracketString>,
-        PrologOptionalWhitespace,
-        OptionalExpression
-        <
-            PrologTermList
-        >,
-        PrologOptionalWhitespace,
-        CharacterSymbol<RightBracketString>
-    >, FlattenType::None, PrologSymbolID::PrologList>
+    >, FlattenType::Flatten, SymbolID::andExpression, PrologTermListError>
     {
     };
     
     // A compound term is composed of an atom called a "functor" and a number of "arguments", which are again terms. Compound terms are ordinarily written as a functor
     // followed by a comma-separated list of argument terms, which is contained in parentheses. The number of arguments is called the term's arity. An atom can be regarded
     // as a compound term with arity zero.
-    // Special case the period string since it is used for lists
     class PrologFunctor : public
     AndExpression<Args
     <
         OrExpression<Args<
-            PrologAtom,
-            CharacterSymbol<PeriodString>
+            PrologAtom
+            // Special case the period string since it is used for lists i.e. .()
+//            CharacterSymbol<PeriodString>
         >>,
-		AndExpression<Args
-		<
-			CharacterSymbol<LeftParenthesisString>,
-			PrologOptionalWhitespace,
-			OptionalExpression
-			<
-				PrologTermList
-			>,
-			PrologOptionalWhitespace,
-			CharacterSymbol<RightParenthesisString>
-		>>
-    >, FlattenType::None, PrologSymbolID::PrologFunctor>
+        OptionalExpression
+        <
+            AndExpression<Args
+            <
+                CharacterSymbol<LeftParenthesisString>,
+                PrologOptionalWhitespace,
+                OptionalExpression
+                <
+                    PrologTermList
+                >,
+                PrologOptionalWhitespace,
+                CharacterSymbol<RightParenthesisString>
+            >>
+        >
+    >, FlattenType::None, PrologSymbolID::PrologFunctor, PrologFunctorError>
     {
     };
 
@@ -248,7 +245,7 @@ namespace Prolog
         <
             PrologTermList
         >
-    >, FlattenType::None, PrologSymbolID::PrologRule>
+    >, FlattenType::None, PrologSymbolID::PrologRule, PrologRuleError>
     {
     };
     
@@ -260,10 +257,11 @@ namespace Prolog
 		CharacterSymbol<PeriodString>,
 		PrologOptionalWhitespace,
         EofSymbol
-    >, FlattenType::None, PrologSymbolID::PrologQuery>
+    >, FlattenType::None, PrologSymbolID::PrologQuery, PrologQueryError>
     {
     };
 
+    
     class PrologDocument : public
     AndExpression<Args<
         OneOrMoreExpression
@@ -272,8 +270,7 @@ namespace Prolog
                 PrologOptionalWhitespace,
                 OrExpression<Args<
                     PrologRule,
-                    PrologFunctor,
-                    PrologAtom
+                    PrologFunctor
                 >>,
                 PrologOptionalWhitespace,
                 CharacterSymbol<PeriodString>,
@@ -282,7 +279,7 @@ namespace Prolog
         >,
         PrologOptionalWhitespace,
         EofSymbol
-    >, FlattenType::None, PrologSymbolID::PrologDocument>
+    >, FlattenType::None, PrologSymbolID::PrologDocument, PrologDocumentError>
     {
     };
 }

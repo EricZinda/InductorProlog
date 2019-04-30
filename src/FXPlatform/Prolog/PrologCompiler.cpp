@@ -54,35 +54,10 @@ shared_ptr<HtnTerm> PrologCompiler::CreateTermFromItem(HtnTermFactory *factory, 
         case PrologSymbolID::PrologAtom:
             return factory->CreateConstant(symbol->ToString());
             break;
-        case PrologSymbolID::PrologList:
-            return CreateTermFromList(factory, symbol);
         default:
             StaticFailFastAssert(false);
             return nullptr;
     }
-}
-
-// Lists are defined inductively: The atom [] is a list. A compound term with functor . (dot) and arity 2, whose second argument is a list, is itself a list.
-// There exists special syntax for denoting lists: .(A, B) is equivalent to [A|B]. For example, the list .(1, .(2, .(3, []))) can also be written as [1 | [2 | [3 | []]]],
-// or even more compactly as [1,2,3]
-shared_ptr<HtnTerm> PrologCompiler::CreateTermFromList(HtnTermFactory *factory, shared_ptr<Symbol> list)
-{
-    vector<shared_ptr<HtnTerm>> arguments;
-    for(int argIndex = 0; argIndex < list->children().size(); argIndex++)
-    {
-        shared_ptr<Symbol> arg = GetChild(list, argIndex, -1);
-        arguments.push_back(CreateTermFromItem(factory, arg));
-    }
-    
-    // Now create a list starting from back to front, right term of the deepest child is [] atom
-    shared_ptr<HtnTerm>rightTerm = factory->CreateConstant("[]");
-    for(vector<shared_ptr<HtnTerm>>::reverse_iterator iter = arguments.rbegin(); iter != arguments.rend(); iter++)
-    {
-        shared_ptr<HtnTerm>arg = *iter;
-        rightTerm = factory->CreateFunctor(".", { arg, rightTerm });
-    }
-    
-    return rightTerm;
 }
 
 shared_ptr<HtnTerm> PrologCompiler::CreateTermFromVariable(HtnTermFactory *factory, shared_ptr<Symbol> variable)
