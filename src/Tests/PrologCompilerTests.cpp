@@ -188,10 +188,16 @@ SUITE(PrologCompilerTests)
         // Document
         rule = TestTryParse<PrologDocument>("a.  ", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
+        rule = TestTryParse<PrologDocument>("a.  b.", deepestFailure, errorMessage);
+        CHECK(rule != nullptr);
+
         rule = TestTryParse<PrologDocument>("a(g, ef) :- foo(a).", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
+        rule = TestTryParse<PrologDocument>("north :- go(north). \r\nsouth :- go(south).", deepestFailure, errorMessage);
+        CHECK(rule != nullptr);
+
         rule = TestTryParse<PrologDocument>("a(g).  ", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
         
@@ -225,6 +231,12 @@ SUITE(PrologCompilerTests)
         CHECK(rule != nullptr);
 
         rule = TestTryParse<PrologComment>("%foo\n\r\n", deepestFailure, errorMessage);
+        CHECK(rule != nullptr);
+
+        rule = TestTryParse<PrologComment>("/* test */", deepestFailure, errorMessage);
+        CHECK(rule != nullptr);
+
+        rule = TestTryParse<PrologComment>("/* test \r\n test2 */", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
 
         // Whitespace

@@ -10,7 +10,7 @@
 
 int main (int argc, char *argv[])
 {
-	SetTraceFilter(SystemTraceType::Parsing, TraceDetail::Diagnostic);
+    SetTraceFilter(SystemTraceType::None, TraceDetail::Normal);
 
 	if(argc != 2)
 	{
