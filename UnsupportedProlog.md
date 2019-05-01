@@ -2,9 +2,14 @@ The Inductor Prolog engine supports only what was required to ship the [Exospeci
 
 The following features are for sure not in the Inductor Prolog engine (this is not an exhaustive list):
 
+
 - ! (cuts)
 - ; (or)
 - -> (if)
 - Terms like a == b instead of ==(a, b)
 - " in comments
 - _ (unnamed variable)
+- Any Metaprogramming features or rules
+	- i.e. declaring a function as dynamic like `dynamic(myRule/1)`
+		- Anything can be changed in IndProlog, this declaration is not necessary
+	

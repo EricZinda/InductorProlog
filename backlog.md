@@ -1,6 +1,7 @@
+- Parse ?Var and Var based on switch
 - Make Adventure.pl compile properly
 	- (done) Support Block comments /* */
-	- Support Assert / Retract
+	- (done) Support Assert / Retract
 		- As far as I can tell the spec is this:
 			- when a predicate is run against the database, each alternative as a result of unification (i.e. each time the tree branches) gets a copy of the state *at that time* and updates to that state are realized immediately ONLY along that branch.
 			- Thoughts:
@@ -157,12 +158,4 @@
 			?- test.
 			ant
 			true [enter].
-	- Support ->
-	- ? Support cuts ?
-	- Support _
-	Nice to have:
-		- Support ;
-		- Support terms like a == b instead of ==(a, b)
-		- Support " in comments
 
-- Parse ?Var and Var based on switch
