@@ -24,6 +24,7 @@ int main (int argc, char *argv[])
 {
 	// Treat all FailFasts as exceptions when running tests so the process doesn't abort
 	TreatFailFastAsException(true);
+
     TestReporterStdout reporter;
     TestRunner runner(reporter);
     return runner.RunTestsIf(Test::GetTestList(), NULL, TestFilter(), 0);

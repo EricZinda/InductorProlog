@@ -47,30 +47,6 @@ SUITE(PrologCompilerTests)
         compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
         CHECK(compiler->Compile("a(b) :-."));
         CHECK(state->DebugHasRule("a(b)", ""));
-        
-        // // Operator
-        // // Syntax: head :- del([listOfAdds]), add([listOfDeletes])
-        // // set-cash ?old ?new) ((have-cash ?old)) ((have-cash ?new)))
-        // state->ClearAll(); planner->ClearAll();
-        // compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
-        // CHECK(compiler->Compile("SetNewCash(?old, ?new) :- del(), add()."));
-        // CHECK(planner->HasOperator("SetNewCash(?old,?new)", "", ""));
-        
-        // state->ClearAll(); planner->ClearAll();
-        // compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
-        // CHECK(compiler->Compile("SetNewCash(?old, ?new) :- del(have-cash(?old)), add(have-cash(?new))."));
-        // CHECK(planner->HasOperator("SetNewCash(?old,?new)", "have-cash(?old)", "have-cash(?new)"));
-        
-        // // Method
-        // state->ClearAll(); planner->ClearAll();
-        // compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
-        // CHECK(compiler->Compile("check3(?x) :- if(), do()."));
-        // CHECK(planner->DebugHasMethod("check3(?x)", "", ""));
-        
-        // state->ClearAll(); planner->ClearAll();
-        // compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
-        // CHECK(compiler->Compile("check3(?x) :- if(need-to-move(?x)), do(on(?x,?z))."));
-        // CHECK(planner->DebugHasMethod("check3(?x)", "need-to-move(?x)", "on(?x,?z)"));
     }
     
     TEST_FIXTURE(ParserTestBase, PrologParserTests)

@@ -843,7 +843,6 @@ SUITE(HtnGoalResolverTests)
         finalUnifier = HtnGoalResolver::ToString(unifier.get());
         CHECK_EQUAL(finalUnifier, "(())");
 
-        
         // ***** make sure variables that have been unified compare their values, not just the variable name
         // ***** single ==() goal preceeded and followed by other goals to make sure unifiers flow through properly
         compiler->Clear();
@@ -963,7 +962,6 @@ SUITE(HtnGoalResolverTests)
         unifier = compiler->SolveGoals();
         finalUnifier = HtnGoalResolver::ToString(unifier.get());
         CHECK_EQUAL(finalUnifier, "((?x = d, ?y = c), (?x = d, ?y = b), (?x = d, ?y = a), (?x = e, ?y = c), (?x = e, ?y = b), (?x = e, ?y = a))");
-        
     }
     
     TEST(HtnGoalResolverFirstTests)

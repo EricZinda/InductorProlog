@@ -120,7 +120,6 @@ SUITE(HtnRuleSetTests)
             "Head1(?X) => After(?X)"
         });
 
-        
         // Ground rules and facts must be unique
         // Not OK to add a ground fact twice
         bool failed = false;
