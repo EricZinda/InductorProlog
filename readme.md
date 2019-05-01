@@ -20,7 +20,7 @@ indprolog is designed to be built with [CMake](https://cmake.org) like this:
 4. Pick the generator that will create the type of project you want and use the `-G` option to choose it. Here are the ones that have been tested:
 	Mac make file: 			`cmake -G "Unix Makefiles" ../src`
 	Mac Xcode:	 			`cmake -G "Xcode" ../src`
-	Windows Visual Studio: 	`cmake ../src`
+	Windows Visual Studio: 	`cmake -G "Visual Studio 16 2019" ../src`
 5. Then actually do the build using this command which magically builds whatever you choose on the command line: 
 	`cmake --build ./`
 

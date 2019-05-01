@@ -345,7 +345,7 @@ public:
             m_currentData = &m_data.back();
         }
         
-        (*m_currentData) |= (0x1 << m_index);
+        (*m_currentData) |= ((intptr_t) 0x1 <<  m_index);
         m_index++;
     }
     

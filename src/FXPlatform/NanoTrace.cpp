@@ -23,6 +23,9 @@ void NanoTrace::FormatTrace(TraceRecord& record, ostream& stream)
 	// Write the timestamp
 	char buffer[20];
 	time_t timestamp = record.timestamp();
+	
+	// Disable "unsafe" warning in Microsoft C++
+	#pragma warning( disable : 4996 )
 	strftime(buffer, 20, "%m%d %H:%M:%S ", localtime(&timestamp));
 	stream << buffer;
 

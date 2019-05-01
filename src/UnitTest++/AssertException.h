@@ -18,8 +18,10 @@ public:
     int LineNumber() const;
 
 private:
-    char m_description[512];
-    char m_filename[256];
+	static const int descriptionSize = 512;
+    char m_description[descriptionSize];
+	static const int filenameSize = 256;
+	char m_filename[filenameSize];
     int m_lineNumber;
 };
 
