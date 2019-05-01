@@ -10,6 +10,7 @@
 #define HtnGoalResolver_hpp
 #include <map>
 #include <functional>
+#include "FXPlatform/FailFast.h"
 #include "HtnRule.h"
 #include "HtnTerm.h"
 enum class ResolveContinuePoint;

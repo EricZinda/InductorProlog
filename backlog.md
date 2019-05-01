@@ -29,7 +29,7 @@
 						- Option 3:
 							- Use the current rule update logic for RuleSet BUT: add a new feature that batches up a bunch of changes that can be committed when it is all done
 							- Require the caller of ResolveRule to commit the changes when done (in case they don't get all the solutions?)?
-						- Option 4: 
+						- (go this way) Option 4: 
 							- Ruleset has a current Generation and rules that get added track their generation.
 							- Asking for a rule implies getting it from the current generation and older
 							- Then: Leave all the current logic for transacting rules too.

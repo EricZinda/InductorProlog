@@ -1,11 +1,10 @@
-//
+﻿//
 //  AIPrologTests.cpp
 //  TestLib
 //
 //  Created by Eric Zinda on 10/15/18.
 //  Copyright © 2018 Eric Zinda. All rights reserved.
 //
-#include "UnitTest++/UnitTest++.h"
 #include "FXPlatform/FailFast.h"
 #include "FXPlatform/Parser/ParserDebug.h"
 #include "FXPlatform/Prolog/HtnGoalResolver.h"
@@ -15,12 +14,11 @@
 #include "FXPlatform/Prolog/PrologParser.h"
 #include "FXPlatform/Prolog/PrologCompiler.h"
 #include "Logger.h"
+#include "ParserTestBase.h"
 #include <thread>
+#include "UnitTest++/UnitTest++.h"
 using namespace Prolog;
 
-class ParserTestBase : public FXPlat::ParserDebug
-{
-};
 
 SUITE(PrologCompilerTests)
 {
