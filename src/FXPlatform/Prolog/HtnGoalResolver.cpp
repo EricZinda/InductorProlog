@@ -373,7 +373,8 @@ shared_ptr<UnifierType> ResolveState::SimplifySolution(const UnifierType &soluti
 
 HtnGoalResolver::HtnGoalResolver()
 {
-    AddCustomRule("count", std::bind(&HtnGoalResolver::RuleCount, std::placeholders::_1));
+	AddCustomRule("assert", std::bind(&HtnGoalResolver::RuleAssert, std::placeholders::_1));
+	AddCustomRule("count", std::bind(&HtnGoalResolver::RuleCount, std::placeholders::_1));
     AddCustomRule("distinct", std::bind(&HtnGoalResolver::RuleDistinct, std::placeholders::_1));
     AddCustomRule("first", std::bind(&HtnGoalResolver::RuleFirst, std::placeholders::_1));
     AddCustomRule("is", std::bind(&HtnGoalResolver::RuleIs, std::placeholders::_1));
@@ -383,6 +384,7 @@ HtnGoalResolver::HtnGoalResolver()
     AddCustomRule("print", std::bind(&HtnGoalResolver::RulePrint, std::placeholders::_1));
     AddCustomRule("sortBy", std::bind(&HtnGoalResolver::RuleSortBy, std::placeholders::_1));
     AddCustomRule("sum", std::bind(&HtnGoalResolver::RuleAggregate, std::placeholders::_1));
+	AddCustomRule("retract", std::bind(&HtnGoalResolver::RuleRetract, std::placeholders::_1));
     AddCustomRule("showTraces", std::bind(&HtnGoalResolver::RuleTrace, std::placeholders::_1));
     AddCustomRule("==", std::bind(&HtnGoalResolver::RuleTermCompare, std::placeholders::_1));
     AddCustomRule("\\==", std::bind(&HtnGoalResolver::RuleTermCompare, std::placeholders::_1));
@@ -597,8 +599,8 @@ shared_ptr<vector<UnifierType>> HtnGoalResolver::ResolveAll(HtnTermFactory *term
 //      - or fails because there is no such thing to do, in which case no solutions are generated from that branch
 //
 // Implementation:
-// This uses depth first search and no recursion (or at least not any unless built-in rules are used) to reduce memory usage
-// Each stack frame represents a different binding of a rule to a goal, which means a set of resolvents which are equivalent to the stack above, but resolved
+// This uses depth first search and no recursion (or at least not any unless built-in rules are used) to reduce memory (i.e. stack) usage
+// Each "stack frame" represents a different binding of a rule to a goal, which means a set of resolvents which are equivalent to the stack above, but resolved
 // by replacing the previous first resolvent with a rule in the database. Each stack frame is a new branch of the solution tree.
 // If anything fails on this branch we backtrack all the way to the place where we branched and try the alternatives
 // If we make it all the way to the point where there are no more resolvents to solve, then we push that solution into the list of solutions and keep going to return
@@ -1215,6 +1217,137 @@ void HtnGoalResolver::RuleNot(ResolveState *state)
             StaticFailFastAssert(false);
             break;
     }
+}
+
+void HtnGoalResolver::RuleAssert(ResolveState* state)
+{
+	shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
+	shared_ptr<HtnTerm> goal = currentNode->currentGoal();
+	shared_ptr<vector<shared_ptr<ResolveNode>>>& resolveStack = state->resolveStack;
+	HtnTermFactory* termFactory = state->termFactory;
+	HtnRuleSet* prog = state->prog;
+
+	switch (currentNode->continuePoint)
+	{
+		case ResolveContinuePoint::CustomStart:
+		{
+			// the assert rule needs a single term
+			if (goal->arguments().size() != 1)
+			{
+				// Invalid program
+				Trace1("ERROR      ", "assert() must have exactly one term: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+				StaticFailFastAssert(false);
+				currentNode->continuePoint = ResolveContinuePoint::ProgramError;
+			}
+
+			shared_ptr<HtnTerm> term = goal->arguments()[0];
+			vector<shared_ptr<HtnTerm>> assertList;
+			if (term->isGround())
+			{
+				assertList.push_back(term);
+			}
+			else
+			{
+				// TODO: What to do?
+				StaticFailFastAssert(false);
+
+				//prog->AllRules([&](const HtnRule & item)
+				//	{
+				//		if (item.IsFact() && item.head()->isEquivalentCompoundTerm(term))
+				//		{
+				//			shared_ptr<UnifierType> sub = Unify(termFactory, item.head(), term);
+				//			if (sub != nullptr)
+				//			{
+				//				shared_ptr<HtnTerm> newTerm = SubstituteUnifiers(termFactory, *sub, term);
+				//				// Should be ground since we are unifying with a fact
+				//				StaticFailFastAssert(newTerm->isGround());
+				//				assertList.push_back(newTerm);
+				//			}
+				//		}
+
+				//		return true;
+				//	});
+			}
+
+			// Add all the facst into the database.
+			prog->Update(termFactory, {}, assertList);
+
+			// Rule resolves to true so no new terms, no unifiers got added since it it is not unified
+			// Nothing to process on children so no special return handling
+			resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}));
+			currentNode->continuePoint = ResolveContinuePoint::Return;
+		}
+		break;
+
+		default:
+			StaticFailFastAssert(false);
+			break;
+	}
+}
+
+void HtnGoalResolver::RuleRetract(ResolveState* state)
+{
+	shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
+	shared_ptr<HtnTerm> goal = currentNode->currentGoal();
+	shared_ptr<vector<shared_ptr<ResolveNode>>>& resolveStack = state->resolveStack;
+	HtnTermFactory* termFactory = state->termFactory;
+	HtnRuleSet* prog = state->prog;
+
+	switch (currentNode->continuePoint)
+	{
+		case ResolveContinuePoint::CustomStart:
+		{
+			// the retract rule needs a single term
+			if (goal->arguments().size() != 1)
+			{
+				// Invalid program
+				Trace1("ERROR      ", "retract() must have exactly one term: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+				StaticFailFastAssert(false);
+				currentNode->continuePoint = ResolveContinuePoint::ProgramError;
+			}
+
+			shared_ptr<HtnTerm> term = goal->arguments()[0];
+			vector<shared_ptr<HtnTerm>> retractList;
+			if (term->isGround())
+			{
+				retractList.push_back(term);
+			}
+			else
+			{
+				// TODO: What to do?
+				StaticFailFastAssert(false);
+				//prog->AllRules([&](const HtnRule & item)
+				//	{
+				//		if (item.IsFact() && item.head()->isEquivalentCompoundTerm(term))
+				//		{
+				//			shared_ptr<UnifierType> sub = Unify(termFactory, item.head(), term);
+				//			if (sub != nullptr)
+				//			{
+				//				shared_ptr<HtnTerm> newTerm = SubstituteUnifiers(termFactory, *sub, term);
+				//				// Should be ground since we are unifying with a fact
+				//				StaticFailFastAssert(newTerm->isGround());
+				//				retractList.push_back(newTerm);
+				//			}
+				//		}
+
+				//		return true;
+				//	});
+			}
+
+			// Remove this fact into the database.  
+			prog->Update(termFactory, retractList, {});
+
+			// Rule resolves to true so no new terms, no unifiers got added since it it is not unified
+			// Nothing to process on children so no special return handling
+			resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}));
+			currentNode->continuePoint = ResolveContinuePoint::Return;
+		}
+		break;
+
+		default:
+			StaticFailFastAssert(false);
+			break;
+	}
 }
 
 void HtnGoalResolver::RulePrint(ResolveState *state)

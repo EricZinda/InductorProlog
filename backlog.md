@@ -1,4 +1,3 @@
-
 - Make Adventure.pl compile properly
 	- (done) Support Block comments /* */
 	- Support Assert / Retract
@@ -13,7 +12,10 @@
 						- If the user chooses not to continue getting solutions, the state isn't changed
 					- every predicate in progress took a snapshot when it started that it passes to its children
 			- Implementation:
-				- A node gets its state from it's parent node
+				- (done) use the existing diff model to isolate changes when running a predicate, but "write thru" to a base ruleset with every change so that global changes get seen.
+				- Each node is isolated from changes that occur when it is being run, but all other nodes see global changes
+				- Start the resolve with a copy so that all nodes are isolated from 
+				- A node gets its state from its parent node
 				- Assert() and Retract() write all the way through to the "master" which isn't used by anyone
 				- the only time you need to copy the ruleset is when you process a dynamic goal, all the others get shared
 				- Changes
@@ -29,11 +31,13 @@
 						- Option 3:
 							- Use the current rule update logic for RuleSet BUT: add a new feature that batches up a bunch of changes that can be committed when it is all done
 							- Require the caller of ResolveRule to commit the changes when done (in case they don't get all the solutions?)?
-						- (go this way) Option 4: 
-							- Ruleset has a current Generation and rules that get added track their generation.
+						- Option 4: 
+							- Shared Rules in Ruleset have a current Generation and rules that get added track their generation.
 							- Asking for a rule implies getting it from the current generation and older
 							- Then: Leave all the current logic for transacting rules too.
 							- Question: Will this make assert() work for HTNs properly?
+						- (go this way) Option 5: 
+							
 		- https://stackoverflow.com/questions/20027182/gnu-prolog-assert-error/20027252#20027252
 		- https://stackoverflow.com/questions/28116244/how-prologs-logical-update-view-works-for-assert-and-retract
 		- https://groups.google.com/forum/#!topic/swi-prolog/FPXi_8Ho9nQ
@@ -41,6 +45,7 @@
 		- https://groups.google.com/forum/#!topic/swi-prolog/FPXi_8Ho9nQ
 		- http://www.swi-prolog.org/pldoc/doc_for?object=retract/1
 		- Scenarios:
+			
 			:- dynamic insect/1, test/0.
 			insect(ant).
 			insect(bee).
@@ -159,3 +164,5 @@
 		- Support ;
 		- Support terms like a == b instead of ==(a, b)
 		- Support " in comments
+
+- Parse ?Var and Var based on switch

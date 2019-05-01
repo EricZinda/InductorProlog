@@ -72,7 +72,7 @@ SUITE(HtnGoalResolverTests)
 {
     TEST(HtnGoalResolverSquareScenarioTest)
     {
-        SetTraceFilter((int) SystemTraceType::Solver | (int) SystemTraceType::System, TraceDetail::Diagnostic);
+        //SetTraceFilter((int) SystemTraceType::Solver | (int) SystemTraceType::System, TraceDetail::Diagnostic);
 
         HtnGoalResolver resolver;
         shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
@@ -447,6 +447,90 @@ SUITE(HtnGoalResolverTests)
         CHECK_EQUAL(finalUnifier, "((?Y = letter(?X), ?Z = capital(?X)))");
     }
     
+	TEST(HtnGoalResolverAssertRetractTests)
+	{
+		HtnGoalResolver resolver;
+		shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+		shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+		shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+		string testState;
+		string goals;
+		string finalUnifier;
+		shared_ptr<vector<UnifierType>> unifier;
+
+		//SetTraceFilter((int)SystemTraceType::Solver, TraceDetail::Diagnostic);
+
+		// ***** single assert() goal 
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1). \r\n" +
+			"itemsInBag(Name2). \r\n" +
+			"trace(?x) :- .\r\n"
+			"goals( assert(itemsInBag(Name3)), itemsInBag(?After) ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((?After = Name1), (?After = Name2), (?After = Name3))");
+		// Should be permanently changed in the ruleset now
+		CHECK(state->DebugHasRule("itemsInBag(Name3)", ""));
+
+		// ***** single assert() goal with a variable that needs to be bound
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1). \r\n" +
+			"itemsInBag(Name2). \r\n" +
+			"rule(?X) :- assert(itemsInBag(?X))."
+			"trace(?x) :- .\r\n"
+			"goals( rule(Name3), itemsInBag(?After) ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((?After = Name1), (?After = Name2), (?After = Name3))");
+		// Should be permanently changed in the ruleset now
+		CHECK(state->DebugHasRule("itemsInBag(Name3)", ""));
+
+		// ***** single retract() goal 
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1). \r\n" +
+			"itemsInBag(Name2). \r\n" +
+			"trace(?x) :- .\r\n"
+			"goals( retract(itemsInBag(Name1)), itemsInBag(?After) ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((?After = Name2))");
+		// Should be permanently changed in the ruleset now
+		CHECK(!state->DebugHasRule("itemsInBag(Name1)", ""));
+
+		// ***** single retract() goal with a variable that needs to be bound
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1). \r\n" +
+			"itemsInBag(Name2). \r\n" +
+			"rule(?X) :- retract(itemsInBag(?X))."
+			"trace(?x) :- .\r\n"
+			"goals( rule(Name1), itemsInBag(?After) ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((?After = Name2))");
+		CHECK(!state->DebugHasRule("itemsInBag(Name1)", ""));
+
+		// TODO: figure out how to make this work
+		//// ***** 
+		//compiler->Clear();
+		//testState = string() +
+		//	"itemsInBag(Name1). \r\n" +
+		//	"itemsInBag(Name2). \r\n" +
+		//	"trace(?x) :- .\r\n"
+		//	"goals( retract(itemsInBag(X)), retract(itemsInBag(Name2)) ).\r\n";
+		//CHECK(compiler->Compile(testState));
+		//unifier = compiler->SolveGoals();
+		//finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		//CHECK_EQUAL(finalUnifier, "((?After = Name2))");
+	}
+
     TEST(HtnGoalResolverMinTests)
     {
         HtnGoalResolver resolver;

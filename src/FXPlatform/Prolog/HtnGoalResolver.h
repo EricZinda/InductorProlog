@@ -49,13 +49,15 @@ public:
 
 private:
     static void RuleAggregate(ResolveState *state);
+	static void RuleAssert(ResolveState* state);
     static void RuleCount(ResolveState *state);
     static void RuleDistinct(ResolveState *state);
     static void RuleFirst(ResolveState *state);
     static void RuleIs(ResolveState *state);
     static void RuleNot(ResolveState *state);
     static void RulePrint(ResolveState *state);
-    static void RuleSortBy(ResolveState *state);
+	static void RuleRetract(ResolveState* state);
+	static void RuleSortBy(ResolveState *state);
     static void RuleTermCompare(ResolveState *state);
     static void RuleTrace(ResolveState *state);
     static void RuleUnify(ResolveState *state);
