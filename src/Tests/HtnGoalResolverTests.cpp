@@ -545,6 +545,16 @@ SUITE(HtnGoalResolverTests)
 		finalUnifier = HtnGoalResolver::ToString(unifier.get());
 		CHECK_EQUAL(finalUnifier, "((?X = Name1, ?Y = lipstick), (?X = Name1, ?Y = tissues), (?X = Name2, ?Y = lipstick), (?X = Name2, ?Y = tissues), ())");
 		
+		// ***** works with initial goals
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1). \r\n" +
+			"itemsInBag(Name2). \r\n" +
+			"goals( itemsInBag(?X), ! ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((?X = Name1))");
 	}
 
 	TEST(HtnGoalResolverAssertRetractTests)

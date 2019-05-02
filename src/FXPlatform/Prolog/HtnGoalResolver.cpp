@@ -303,7 +303,9 @@ ResolveState::ResolveState(HtnTermFactory *termFactoryArg, HtnRuleSet *progArg, 
     uniquifier(0)
 {
     // Start with the initial node on the stack
-    resolveStack->push_back(ResolveNode::CreateInitialNode(initialResolventArg, {}));
+	shared_ptr<vector<shared_ptr<HtnTerm>>> resolvent = shared_ptr<vector<shared_ptr<HtnTerm>>>(new vector<shared_ptr<HtnTerm>>());
+	ResolveNode::AddNewGoalsToResolvent(termFactory, initialResolventArg.rbegin(), initialResolventArg.rend(), resolvent, &uniquifier);
+    resolveStack->push_back(ResolveNode::CreateInitialNode(*resolvent, {}));
 }
 
 string ResolveState::GetStackString()
@@ -587,7 +589,7 @@ shared_ptr<vector<UnifierType>> HtnGoalResolver::ResolveAll(HtnTermFactory *term
     shared_ptr<vector<UnifierType>> solutions = shared_ptr<vector<UnifierType>>(new vector<UnifierType>());
     while(true)
     {
-        Trace1("CONTINUE   ", "goals:{0}", initialIndent, state->fullTrace, HtnTerm::ToString(*state->resolveStack->back()->resolvent()));
+        Trace1("CONTINUE   ", "goals:{0}", initialIndent, state->fullTrace, (state->resolveStack->size() > 0 ? HtnTerm::ToString(*state->resolveStack->back()->resolvent()) : ""));
         shared_ptr<UnifierType> solution = ResolveNext(state.get());
         if(solution != nullptr)
         {

@@ -86,7 +86,7 @@ class ResolveNode
 public:
     typedef std::set<std::shared_ptr<HtnTerm>, HtnTermComparer> TermSetType;
     ResolveNode(std::shared_ptr<std::vector<std::shared_ptr<HtnTerm>>> resolventArg, std::shared_ptr<UnifierType> unifierArg);
-	void AddNewGoalsToResolvent(HtnTermFactory* termFactory, std::vector<std::shared_ptr<HtnTerm>>::const_reverse_iterator startIter, std::vector<std::shared_ptr<HtnTerm>>::const_reverse_iterator endIter, std::shared_ptr<std::vector<std::shared_ptr<HtnTerm>>> existingResolvent, int* uniquifier);
+	static void AddNewGoalsToResolvent(HtnTermFactory* termFactory, std::vector<std::shared_ptr<HtnTerm>>::const_reverse_iterator startIter, std::vector<std::shared_ptr<HtnTerm>>::const_reverse_iterator endIter, std::shared_ptr<std::vector<std::shared_ptr<HtnTerm>>> existingResolvent, int* uniquifier);
     void AddToSolutions(std::shared_ptr<std::vector<UnifierType>> &solutions);
     static std::shared_ptr<ResolveNode> CreateInitialNode(const std::vector<std::shared_ptr<HtnTerm>> &resolventArg, const UnifierType &unifierArg);
     std::shared_ptr<ResolveNode> CreateChildNode(HtnTermFactory *termFactory, const std::vector<std::shared_ptr<HtnTerm>> &originalGoals, const std::vector<std::shared_ptr<HtnTerm>> &additionalResolvents, const UnifierType &additionalSubstitution, int* uniquifier);
