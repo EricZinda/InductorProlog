@@ -54,6 +54,7 @@ ResolveNode::ResolveNode(shared_ptr<vector<shared_ptr<HtnTerm>>> resolventArg, s
     cachedDynamicSize(-1),
     continuePoint(ResolveContinuePoint::NextGoal),
     currentRuleIndex(-1),
+	isCut(false),
     isStandaloneResolve(false),
     originalGoalCount((int) resolventArg->size() - 1),
     previousCollectAllSolutions(false),
@@ -81,7 +82,45 @@ shared_ptr<ResolveNode> ResolveNode::CreateInitialNode(const vector<shared_ptr<H
     return initialNode;
 }
 
-shared_ptr<ResolveNode> ResolveNode::CreateChildNode(HtnTermFactory *termFactory, const vector<shared_ptr<HtnTerm>> &originalGoals, const vector<shared_ptr<HtnTerm>> &additionalResolvents, const UnifierType &additionalSubstitution)
+void ResolveNode::AddNewGoalsToResolvent(HtnTermFactory* termFactory, vector<shared_ptr<HtnTerm>>::const_reverse_iterator startIter, vector<shared_ptr<HtnTerm>>::const_reverse_iterator endIter, shared_ptr<vector<shared_ptr<HtnTerm>>> existingResolvent, int* uniquifier)
+{
+	// New goals must be inserted at the beginning since Prolog does a depth first search, otherwise programs that expect
+	// AND clauses to be evaluated from left to right won't work properly
+	shared_ptr<HtnTerm> cutEnd;
+	string cutIDString;
+	for(auto resolventIter = startIter; resolventIter != endIter; ++resolventIter)
+	{
+		// If this node represents a rule that contains a cut that we might hit, we need to wrap the resolvent in fake items so we know
+		// where to jump back to if the cut happens. Replace all cut terms with a cutEnd with a matching ID
+		if((*resolventIter)->isCut())
+		{
+			// Only create the terms if we need them
+			if(cutEnd == nullptr)
+			{
+				cutIDString = lexical_cast<string>(*uniquifier);
+				(*uniquifier) = (*uniquifier) + 1;
+
+				cutEnd = termFactory->CreateConstantFunctor("!<", { cutIDString });
+			}
+
+			existingResolvent->insert(existingResolvent->begin(), cutEnd);
+		}
+		else
+		{
+			existingResolvent->insert(existingResolvent->begin(), *resolventIter);
+		}
+	}
+
+
+	// If there was a cut, at a cutStart term at the front so we know where to cut to
+	if(cutEnd != nullptr)
+	{
+		shared_ptr<HtnTerm> cutStart = termFactory->CreateConstantFunctor("!>", { cutIDString });
+		existingResolvent->insert(existingResolvent->begin(), cutStart);
+	}
+}
+
+shared_ptr<ResolveNode> ResolveNode::CreateChildNode(HtnTermFactory *termFactory, const vector<shared_ptr<HtnTerm>> &originalGoals, const vector<shared_ptr<HtnTerm>> &additionalResolvents, const UnifierType &additionalSubstitution, int* uniquifier)
 {
     // We should never create a child of a node that has no resolvent
     FailFastAssert(m_resolvent != nullptr && m_resolvent->size() > 0);
@@ -104,10 +143,9 @@ shared_ptr<ResolveNode> ResolveNode::CreateChildNode(HtnTermFactory *termFactory
     shared_ptr<vector<shared_ptr<HtnTerm>>> childResolvent = shared_ptr<vector<shared_ptr<HtnTerm>>>(new vector<shared_ptr<HtnTerm>>());
     childResolvent->insert(childResolvent->begin(), ++(m_resolvent->begin()), m_resolvent->end());
     
-    // New goals must be inserted at the beginning since Prolog does a depth first search, otherwise programs that expect
-    // AND clauses to be evaluated from left to right won't work properly
-    childResolvent->insert(childResolvent->begin(), additionalResolvents.begin(), additionalResolvents.end());
-    
+	// Now add the new ones
+	AddNewGoalsToResolvent(termFactory, additionalResolvents.rbegin(), additionalResolvents.rend(), childResolvent, uniquifier);
+
     // Create the child unifiers:
     // - Substitute unifier for this new unification with currentUnifier
     // - Add the new unifiers onto the end as well since they have potentially bound new variables
@@ -209,13 +247,13 @@ shared_ptr<UnifierType> ResolveNode::RemoveUnusedUnifiers(shared_ptr<TermSetType
     return simplifiedUnifiers;
 }
 
-void ResolveNode::PushStandaloneResolve(ResolveState *state, shared_ptr<TermSetType> additionalVariablesToKeep, vector<shared_ptr<HtnTerm>>::const_iterator firstTerm, vector<shared_ptr<HtnTerm>>::const_iterator lastTerm, ResolveContinuePoint continuePointArg)
+void ResolveNode::PushStandaloneResolve(ResolveState *state, shared_ptr<TermSetType> additionalVariablesToKeep, vector<shared_ptr<HtnTerm>>::const_reverse_iterator startIter, vector<shared_ptr<HtnTerm>>::const_reverse_iterator endIter, ResolveContinuePoint continuePointArg)
 {
     vector<shared_ptr<ResolveNode>> &resolveStack = *state->resolveStack;
     
     // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
     shared_ptr<vector<shared_ptr<HtnTerm>>> argumentsAsResolvent = shared_ptr<vector<shared_ptr<HtnTerm>>>(new vector<shared_ptr<HtnTerm>>());
-    argumentsAsResolvent->insert(argumentsAsResolvent->begin(), firstTerm, lastTerm);
+	AddNewGoalsToResolvent(state->termFactory, startIter, endIter, argumentsAsResolvent, &(state->uniquifier));
     Trace1("           ", "resolve standalone: {0}", state->initialIndent + resolveStack.size(), state->fullTrace, HtnTerm::ToString(*argumentsAsResolvent));
     
     shared_ptr<ResolveNode> standaloneNode = ResolveNode::CreateInitialNode(*argumentsAsResolvent, *unifier);
@@ -646,7 +684,42 @@ shared_ptr<UnifierType> HtnGoalResolver::ResolveNext(ResolveState *state)
                 return nullptr;
             }
             break;
-                
+
+			case ResolveContinuePoint::Cut:
+			{
+				// We have returned from processing after a cut and reached the cut point again
+				// Now we need to pop the stack until we get to the point where the rule that contains 
+				// this cut was introduced and remove them all so that we don't backtrack on them
+				// The part of the stack that will get skipped is bounded by goals "!>(ID)" at the beginning
+				// and "!<(ID)" at the end (this node)
+				// Thus, we pop the stack until we find the start node that matches the ID of this one
+				string cutID = currentNode->currentGoal()->arguments()[0]->name();
+				bool found = false;
+				while (resolveStack->size() > 0)
+				{
+					shared_ptr<HtnTerm> goal = resolveStack->back()->currentGoal();
+					resolveStack->pop_back();
+					if(goal != nullptr && goal->name() == "!>" && goal->arguments()[0]->name() == cutID)
+					{
+						// Found it!
+						found = true;
+						break;
+					}
+				}
+
+				// Now, we need to stop the last node before the cut from processing any alternatives
+				// If the stack is empty we encountered a degenerate case where the entire thing we were
+				// asked to resolve started with "!", which is meaningless so we can ignore
+				FailFastAssert(found);
+				if(resolveStack->size() > 0)
+				{
+					resolveStack->back()->SetCut();
+				}
+
+				// And then let it continue on processing this node
+			}
+			break;
+
             case ResolveContinuePoint::NextGoal:
             {
                 // Get the next goal on the list of resolvents
@@ -662,6 +735,32 @@ shared_ptr<UnifierType> HtnGoalResolver::ResolveNext(ResolveState *state)
                         return state->SimplifySolution(*currentNode->unifier, *state->initialGoals);
                     }
                 }
+				// If it is the start of a cut we just ignore it and keep going since it is just a marker on the stack
+				else if (goal->name() == "!>")
+				{
+					// There must always be at least one goal after a start, even if it is only "!"
+					FailFastAssert(!currentNode->IsLastGoalInResolvent());
+
+					// Cut resolves to true so no new terms, no unifiers got added since it it is not unified
+					// Nothing to process on children so no special return handling
+					resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &uniquifier));
+					Trace2("CUTSTART   ", "goal:{0}, resolvent:{1}", indentLevel, state->fullTrace, goal->ToString(), HtnTerm::ToString(*currentNode->resolvent()));
+				}
+				// We are executing a cut end, nothing happens until we get back to this point
+				else if (goal->name() == "!<")
+				{
+					// When we reach a goal that is a cut, we should prevent all backtracking before this point
+					// *for this clause*.  So, succeed for this goal, continue processing goals, 
+					// but when we get back to this point on the tree again, jump back to the stack frame which
+					// represents the start of the "fence" for this cut, which is right before the goal
+					// just return whatever solutions we have found
+					currentNode->continuePoint = ResolveContinuePoint::Cut;
+
+					// Cut resolves to true so no new terms, no unifiers got added since it it is not unified
+					// Nothing to process on children so no special return handling
+					resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &uniquifier));
+					Trace2("CUTEND     ", "goal:{0}, resolvent:{1}", indentLevel, state->fullTrace, goal->ToString(), HtnTerm::ToString(*currentNode->resolvent()));
+				}
                 else
                 {
                     // Find all the rules that unify with the first goal on the list
@@ -726,7 +825,7 @@ shared_ptr<UnifierType> HtnGoalResolver::ResolveNext(ResolveState *state)
                     RuleBindingType ruleBinding = currentNode->currentRule();
                     Trace1("           ", "rule:{0}", indentLevel, state->fullTrace, ruleBinding.first->ToString());
                     Trace1("           ", "unifier:{0}", indentLevel, state->fullTrace, ToString(ruleBinding.second));
-                    resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, ruleBinding.first->tail(), ruleBinding.second));
+                    resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, ruleBinding.first->tail(), ruleBinding.second, &uniquifier));
                 }
                 else
                 {
@@ -789,7 +888,7 @@ void HtnGoalResolver::RuleAggregate(ResolveState *state)
             }
             
             // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
-            currentNode->PushStandaloneResolve(state, variablesToKeep, ++(++goal->arguments().begin()), goal->arguments().end(), ResolveContinuePoint::CustomContinue1);
+            currentNode->PushStandaloneResolve(state, variablesToKeep, goal->arguments().rbegin(), --(--goal->arguments().rend()), ResolveContinuePoint::CustomContinue1);
         }
         break;
             
@@ -873,7 +972,7 @@ void HtnGoalResolver::RuleAggregate(ResolveState *state)
                     // We treat this as a rule where the variable got unified with the result. So, there are no new goals to add, but there are new unifiers
                     // Nothing to do on return
                     UnifierType exprUnifier( { UnifierItemType(variable, aggregate ) } );
-                    resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, exprUnifier));
+                    resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, exprUnifier, &(state->uniquifier)));
                     currentNode->continuePoint = ResolveContinuePoint::Return;
                 }
             }
@@ -912,7 +1011,7 @@ void HtnGoalResolver::RuleCount(ResolveState *state)
             }
 
             // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
-            currentNode->PushStandaloneResolve(state, nullptr, ++goal->arguments().begin(), goal->arguments().end(), ResolveContinuePoint::CustomContinue1);
+            currentNode->PushStandaloneResolve(state, nullptr, goal->arguments().rbegin(), --goal->arguments().rend(), ResolveContinuePoint::CustomContinue1);
         }
         break;
 
@@ -934,7 +1033,7 @@ void HtnGoalResolver::RuleCount(ResolveState *state)
             // We treat this as a rule where the variable got unified with the result. So, there are no new goals to add, but there are new unifiers
             // Nothing to do on return
             UnifierType exprUnifier( { UnifierItemType(variable, termFactory->CreateConstant(lexical_cast<string>(count)) ) } );
-            resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, exprUnifier));
+            resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, exprUnifier, &(state->uniquifier)));
             currentNode->continuePoint = ResolveContinuePoint::Return;
             
             currentNode->PopStandaloneResolve(state);
@@ -979,7 +1078,7 @@ void HtnGoalResolver::RuleDistinct(ResolveState *state)
             }
 
             // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
-            currentNode->PushStandaloneResolve(state, variablesToKeep, ++goal->arguments().begin(), goal->arguments().end(), ResolveContinuePoint::CustomContinue1);
+            currentNode->PushStandaloneResolve(state, variablesToKeep, goal->arguments().rbegin(), --goal->arguments().rend(), ResolveContinuePoint::CustomContinue1);
         }
             break;
             
@@ -1077,7 +1176,7 @@ void HtnGoalResolver::RuleFirst(ResolveState *state)
             }
 
             // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
-            currentNode->PushStandaloneResolve(state, variablesToKeep, goal->arguments().begin(), goal->arguments().end(), ResolveContinuePoint::CustomContinue1);
+            currentNode->PushStandaloneResolve(state, variablesToKeep, goal->arguments().rbegin(), goal->arguments().rend(), ResolveContinuePoint::CustomContinue1);
         }
         break;
 
@@ -1148,7 +1247,7 @@ void HtnGoalResolver::RuleIs(ResolveState *state)
                     // We treat this as a rule where the variable got unified with the result. So, there are no new goals to add, but there are new unifiers
                     // Nothing to do on return
                     UnifierType exprUnifier( { UnifierItemType(variable, exprResult) } );
-                    resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, exprUnifier));
+                    resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, exprUnifier, &(state->uniquifier)));
                     currentNode->continuePoint = ResolveContinuePoint::Return;
                 }
                 else
@@ -1182,7 +1281,7 @@ void HtnGoalResolver::RuleNot(ResolveState *state)
         {
             // this entire branch of the tree will succeed only if it fails
             // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
-            currentNode->PushStandaloneResolve(state, nullptr, goal->arguments().begin(), goal->arguments().end(), ResolveContinuePoint::CustomContinue1);
+            currentNode->PushStandaloneResolve(state, nullptr, goal->arguments().rbegin(), goal->arguments().rend(), ResolveContinuePoint::CustomContinue1);
         }
         break;
 
@@ -1196,7 +1295,7 @@ void HtnGoalResolver::RuleNot(ResolveState *state)
                 // No unifiers got added since it was ground so no changes there
                 // No new goals were added since it just resolved to "true"
                 Trace1("           ", "not() rule succeeded, goals are false: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, HtnTerm::ToString((*currentNode->resolvent())[0]->arguments()));
-                resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}));
+                resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
                 currentNode->continuePoint = ResolveContinuePoint::Return;
             }
             else
@@ -1274,7 +1373,7 @@ void HtnGoalResolver::RuleAssert(ResolveState* state)
 
 			// Rule resolves to true so no new terms, no unifiers got added since it it is not unified
 			// Nothing to process on children so no special return handling
-			resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}));
+			resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
 			currentNode->continuePoint = ResolveContinuePoint::Return;
 		}
 		break;
@@ -1339,7 +1438,7 @@ void HtnGoalResolver::RuleRetract(ResolveState* state)
 
 			// Rule resolves to true so no new terms, no unifiers got added since it it is not unified
 			// Nothing to process on children so no special return handling
-			resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}));
+			resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
 			currentNode->continuePoint = ResolveContinuePoint::Return;
 		}
 		break;
@@ -1366,7 +1465,7 @@ void HtnGoalResolver::RulePrint(ResolveState *state)
 
             // Rule resolves to true so no new terms, no unifiers got added since it was ground so no changes there
             // Nothing to process on children so no special return handling
-            resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}));
+            resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
             currentNode->continuePoint = ResolveContinuePoint::Return;
         }
         break;
@@ -1410,7 +1509,7 @@ void HtnGoalResolver::RuleSortBy(ResolveState *state)
             }
 
             // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
-            currentNode->PushStandaloneResolve(state, variablesToKeep, goal->arguments()[1]->arguments().begin(), goal->arguments()[1]->arguments().end(), ResolveContinuePoint::CustomContinue1);
+            currentNode->PushStandaloneResolve(state, variablesToKeep, goal->arguments()[1]->arguments().rbegin(), goal->arguments()[1]->arguments().rend(), ResolveContinuePoint::CustomContinue1);
         }
         break;
             
@@ -1527,7 +1626,7 @@ void HtnGoalResolver::RuleTermCompare(ResolveState *state)
                     
                     // Rule resolves to true so no new terms, no unifiers got added so no changes there
                     // Nothing to process on children so no special return handling
-                    resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}));
+                    resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
                     currentNode->continuePoint = ResolveContinuePoint::Return;
                 }
                 else
@@ -1565,7 +1664,7 @@ void HtnGoalResolver::RuleTrace(ResolveState *state)
             // Add all of the arguments as terms so they will get resolved, but no new unifiers
             vector<shared_ptr<HtnTerm>> terms;
             terms.insert(terms.begin(), goal->arguments().begin(), goal->arguments().end());
-            resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, terms, {}));
+            resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, terms, {}, &(state->uniquifier)));
             currentNode->continuePoint = ResolveContinuePoint::CustomContinue1;
         }
         break;
@@ -1621,7 +1720,7 @@ void HtnGoalResolver::RuleUnify(ResolveState *state)
                     // The unifiers we found get added to the list of unifiers
                     // No new goals were added since it just resolved to "true"
                     Trace1("           ", "=() rule succeeded, new unification: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, ToString(*result));
-                    resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, { *result }));
+                    resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, { *result }, &(state->uniquifier)));
                     currentNode->continuePoint = ResolveContinuePoint::Return;
                 }
             }

@@ -59,6 +59,7 @@ public:
     bool isArithmetic() const;
     bool isCompoundTerm() { return arity() > 0; }
     bool isConstant() const { return !m_isVariable && m_arguments.size() == 0; }
+	bool isCut() const { return  *m_namePtr == "!";  }
     bool isEquivalentCompoundTerm(std::shared_ptr<HtnTerm> other) { return isCompoundTerm() && other->isCompoundTerm() && arity() == other->arity() && name() == other->name(); }
     bool isGround() const;
     void SetInterned() { m_isInterned = true; };

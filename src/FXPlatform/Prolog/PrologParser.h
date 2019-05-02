@@ -95,6 +95,7 @@ namespace Prolog
             <
                 MathSymbol
             >,
+			CharacterSymbol<ExclamationPointString, FlattenType::None>,
             AndExpression<Args
             <
 				CharacterSymbol<DoubleQuoteString>,

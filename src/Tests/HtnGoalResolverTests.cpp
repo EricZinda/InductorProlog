@@ -447,6 +447,106 @@ SUITE(HtnGoalResolverTests)
         CHECK_EQUAL(finalUnifier, "((?Y = letter(?X), ?Z = capital(?X)))");
     }
     
+	TEST(HtnGoalResolverCutTests)
+	{
+		HtnGoalResolver resolver;
+		shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+		shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+		shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+		string testState;
+		string goals;
+		string finalUnifier;
+		shared_ptr<vector<UnifierType>> unifier;
+
+		SetTraceFilter((int)SystemTraceType::Solver, TraceDetail::Diagnostic);
+
+		// ***** multiple rules, second rule doesn't run after cut 
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1). \r\n" +
+			"itemsInBag(Name2). \r\n" +
+			"rule(?X) :- itemsInBag(?X), !."
+			"rule(?X) :- =(?X, Bad)."
+			"trace(?x) :- .\r\n"
+			"goals( rule(?X) ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((?X = Name1))");
+
+		// ***** multiple rules, second rule doesn't run after cut, but backtracking AFTER cut still works 
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1). \r\n" +
+			"itemsInBag(Name2). \r\n" +
+			"itemsInPurse(lipstick). \r\n" +
+			"itemsInPurse(tissues). \r\n" +
+			"rule(?X, ?Y) :- itemsInBag(?X), !, itemsInPurse(?Y)."
+			"rule(?X, ?Y) :- =(?X, Bad), =(?Y, Bad)."
+			"trace(?x) :- .\r\n"
+			"goals( rule(?X, ?Y) ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((?X = Name1, ?Y = lipstick), (?X = Name1, ?Y = tissues))");
+
+		// Cut in zero argument built-in function that does standalone eval should work
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1). \r\n" +
+			"itemsInBag(Name2). \r\n" +
+			"goals( count(?Count, itemsInBag(?X), !) ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((?Count = 1))");
+
+		// Cut in two argument built-in function that does standalone eval should work
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1, 5). \r\n" +
+			"itemsInBag(Name2, 4). \r\n" +
+			"goals( min(?Min, ?Size, itemsInBag(?X, ?Size), !) ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((?Min = 5))");
+
+		// Two cuts works
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1). \r\n" +
+			"itemsInBag(Name2). \r\n" +
+			"itemsInPurse(lipstick). \r\n" +
+			"itemsInPurse(tissues). \r\n" +
+			"rule(?X, ?Y) :- itemsInBag(?X), !, itemsInPurse(?Y), !."
+			"rule(?X, ?Y) :- =(?X, Bad), =(?Y, Bad)."
+			"trace(?x) :- .\r\n"
+			"goals( rule(?X, ?Y) ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((?X = Name1, ?Y = lipstick))");
+
+		// Cuts at the begining of a rule work
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1). \r\n" +
+			"itemsInBag(Name2). \r\n" +
+			"itemsInPurse(lipstick). \r\n" +
+			"itemsInPurse(tissues). \r\n" +
+			"rule(?X, ?Y) :- itemsInBag(?X), itemsInPurse(?Y)."
+			"rule(?X, ?Y) :- !."
+			"rule(?X, ?Y) :- =(?X, Bad), =(?Y, Bad)."
+			"trace(?x) :- .\r\n"
+			"goals( rule(?X, ?Y) ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((?X = Name1, ?Y = lipstick), (?X = Name1, ?Y = tissues), (?X = Name2, ?Y = lipstick), (?X = Name2, ?Y = tissues), ())");
+		
+	}
+
 	TEST(HtnGoalResolverAssertRetractTests)
 	{
 		HtnGoalResolver resolver;

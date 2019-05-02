@@ -93,6 +93,8 @@ SUITE(PrologCompilerTests)
         rule = TestTryParse<PrologAtom>("-1.2", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
 
+		rule = TestTryParse<PrologAtom>("!", deepestFailure, errorMessage);
+		CHECK(rule != nullptr);
 
         // variable
         rule = TestTryParse<PrologVariable>("?a", deepestFailure, errorMessage);
@@ -113,6 +115,9 @@ SUITE(PrologCompilerTests)
         // term list
         rule = TestTryParse<PrologTermList>("foo(a)", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
+
+		rule = TestTryParse<PrologTermList>("foo(a), !", deepestFailure, errorMessage);
+		CHECK(rule != nullptr);
 
         // functor
         rule = TestTryParse<PrologFunctor>("a()", deepestFailure, errorMessage);
@@ -158,6 +163,9 @@ SUITE(PrologCompilerTests)
         rule = TestTryParse<PrologRule>("a( g, ef) :- foo(a)", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
 
+		rule = TestTryParse<PrologRule>("a( g, ef) :- foo(a), !", deepestFailure, errorMessage);
+		string foo = PrintTree(rule, 1);
+		CHECK(rule != nullptr);
 
         // Document
         rule = TestTryParse<PrologDocument>("a.  ", deepestFailure, errorMessage);

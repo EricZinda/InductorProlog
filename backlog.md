@@ -1,3 +1,13 @@
+- Implement cuts
+	- (done) Test to make sure standalone resolve works
+	- http://www.amzi.com/manuals/amzi/pro/ref_execution.htm
+		- once a cut is executed, the choice of the clause which contains it is frozen as a proof step. Also any choices made during the proof of the goals between the head of the clause and the cut are frozen. Thus cut acts like a fence. When backtracking passes over the cut (heading left in a clause), then proof reconsideration continues not with the goal to the left of the !, but the goal to the left of the goal which chose the clause containing the cut.
+
+	- when we hit a cut in a resolvent, it means we should not try other rule bindings for the resolvent goal that bound to the rule that generated *that* resolvent 
+		- Once the solver is finished exploring the tree *after* the cut point and it returns to the cut point, we want to jump all the way back to the part of the tree that started off *this clause* and continue
+		- We could add a fence stack frame around any rule that has a cut in it when the rule is first added and jump to it when we return to the cut
+		
+
 - Parse ?Var and Var based on switch
 - Make Adventure.pl compile properly
 	- (done) Support Block comments /* */

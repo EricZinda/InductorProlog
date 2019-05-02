@@ -74,6 +74,7 @@ enum class ResolveContinuePoint
     CustomContinue2,
     CustomContinue3,
     CustomContinue4,
+	Cut,
     NextGoal,
     NextRuleThatUnifies,
     ProgramError,
@@ -85,9 +86,10 @@ class ResolveNode
 public:
     typedef std::set<std::shared_ptr<HtnTerm>, HtnTermComparer> TermSetType;
     ResolveNode(std::shared_ptr<std::vector<std::shared_ptr<HtnTerm>>> resolventArg, std::shared_ptr<UnifierType> unifierArg);
+	void AddNewGoalsToResolvent(HtnTermFactory* termFactory, std::vector<std::shared_ptr<HtnTerm>>::const_reverse_iterator startIter, std::vector<std::shared_ptr<HtnTerm>>::const_reverse_iterator endIter, std::shared_ptr<std::vector<std::shared_ptr<HtnTerm>>> existingResolvent, int* uniquifier);
     void AddToSolutions(std::shared_ptr<std::vector<UnifierType>> &solutions);
     static std::shared_ptr<ResolveNode> CreateInitialNode(const std::vector<std::shared_ptr<HtnTerm>> &resolventArg, const UnifierType &unifierArg);
-    std::shared_ptr<ResolveNode> CreateChildNode(HtnTermFactory *termFactory, const std::vector<std::shared_ptr<HtnTerm>> &originalGoals, const std::vector<std::shared_ptr<HtnTerm>> &additionalResolvents, const UnifierType &additionalSubstitution);
+    std::shared_ptr<ResolveNode> CreateChildNode(HtnTermFactory *termFactory, const std::vector<std::shared_ptr<HtnTerm>> &originalGoals, const std::vector<std::shared_ptr<HtnTerm>> &additionalResolvents, const UnifierType &additionalSubstitution, int* uniquifier);
     std::shared_ptr<HtnTerm> currentGoal()
     {
         return (m_resolvent == nullptr || m_resolvent->size() == 0) ? nullptr : (*m_resolvent)[0];
@@ -150,8 +152,13 @@ public:
             variablesToKeepSize;
     }
     
+	bool IsLastGoalInResolvent()
+	{
+		return currentGoal() == nullptr || m_resolvent->size() == 1;
+	}
+
     void PopStandaloneResolve(ResolveState *state);
-    void PushStandaloneResolve(ResolveState *state, std::shared_ptr<TermSetType> additionalVariablesToKeep, std::vector<std::shared_ptr<HtnTerm>>::const_iterator firstTerm, std::vector<std::shared_ptr<HtnTerm>>::const_iterator lastTerm, ResolveContinuePoint continuePointArg);
+	void PushStandaloneResolve(ResolveState* state, std::shared_ptr<TermSetType> additionalVariablesToKeep, std::vector<std::shared_ptr<HtnTerm>>::const_reverse_iterator startIter, std::vector<std::shared_ptr<HtnTerm>>::const_reverse_iterator endIter, ResolveContinuePoint continuePointArg);
     static std::shared_ptr<UnifierType> RemoveUnusedUnifiers(std::shared_ptr<TermSetType> variablesToKeep, const UnifierType &currentUnifiers, const std::vector<std::shared_ptr<HtnTerm>> &originalGoals, const std::vector<std::shared_ptr<HtnTerm>> &resolvent);
     int CountOfGoalsLeftToProcess()
     {
@@ -159,6 +166,16 @@ public:
         return originalGoalCount;
     }
     
+	// If we get cut, it means stop processing alternatives for this node
+	void SetCut()
+	{
+		isCut = true;
+		if(rulesThatUnify != nullptr)
+		{
+			currentRuleIndex = (int)rulesThatUnify->size();
+		}
+	}
+
     bool SetNextRule()
     {
         currentRuleIndex++;
@@ -181,6 +198,7 @@ private:
     // NOTE: If you change members, remember to change dynamicSize() function too
     // The size of a node doesn't change unless it is being actively worked on, so we cache it
     int64_t cachedDynamicSize;
+	bool isCut;
     bool isStandaloneResolve; // True for all child nodes of a standalone resolve
     bool pushedStandaloneResolver;
     std::shared_ptr<std::vector<UnifierType>> previousSolutions;
