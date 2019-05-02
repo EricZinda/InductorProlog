@@ -15,8 +15,9 @@ void HtnRuleSet::HtnSharedRules::AddRule(shared_ptr<HtnTerm> head, vector<shared
     FailFastAssert(!m_isLocked);
     FailFastAssert(head->name().size() > 0);
     HtnTerm::HtnTermID headID = head->GetUniqueID();
-    // Ground rules must be unique
-    if(head->isGround())
+
+    // Ground facts must be unique
+    if(tail.size() == 0 && head->isGround())
     {
         FailFastAssert(m_ruleHeads.find(headID) == m_ruleHeads.end());
     }

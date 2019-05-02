@@ -3,7 +3,6 @@ The Inductor Prolog engine supports only what was required to ship the [Exospeci
 The following features are for sure not in the Inductor Prolog engine (this is not an exhaustive list):
 
 
-- ! (cuts)
 - ; (or)
 - -> (if)
 - Terms like a == b instead of ==(a, b)
