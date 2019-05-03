@@ -447,6 +447,68 @@ SUITE(HtnGoalResolverTests)
         CHECK_EQUAL(finalUnifier, "((?Y = letter(?X), ?Z = capital(?X)))");
     }
     
+	TEST(HtnGoalResolverVariableTests)
+	{
+		HtnGoalResolver resolver;
+		shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+		shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+		shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+		string testState;
+		string goals;
+		string finalUnifier;
+		shared_ptr<vector<UnifierType>> unifier;
+
+		SetTraceFilter((int)SystemTraceType::Solver, TraceDetail::Diagnostic);
+
+		// ***** Make sure the same variables get mapped to the same renamed variables 
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1, Name1). \r\n" +
+			"itemsInBag(Name2, Name3). \r\n" +
+			"goals( itemsInBag(?X, ?X) ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((?X = Name1))");
+	
+		// ***** dontcare variables match anything and aren't returned
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1). \r\n" +
+			"itemsInBag(Name2). \r\n" +
+			"rule(?X) :- itemsInBag(_), itemsInBag(?X)."
+			"goals( rule(?X) ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((?X = Name1), (?X = Name2), (?X = Name1), (?X = Name2))");
+
+		// ***** dontcare variables in a query aren't returned
+		compiler->Clear();
+		testState = string() +
+			"itemsInBag(Name1). \r\n" +
+			"itemsInBag(Name2). \r\n" +
+			"rule(?X) :- itemsInBag(_), itemsInBag(?X)."
+			"goals( rule(_) ).\r\n";
+		CHECK(compiler->Compile(testState));
+		unifier = compiler->SolveGoals();
+		finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		CHECK_EQUAL(finalUnifier, "((), (), (), ())");
+
+		// TODO: Make this test work
+		//// ***** Don't care variables aren't mapped to be the same name, they are always different 
+		//// Also: Need to work in initial goal
+		//compiler->Clear();
+		//testState = string() +
+		//	"itemsInBag(Name1, Name1). \r\n" +
+		//	"itemsInBag(Name2, Name3). \r\n" +
+		//	"goals( itemsInBag(_, _) ).\r\n";
+		//CHECK(compiler->Compile(testState));
+		//unifier = compiler->SolveGoals();
+		//finalUnifier = HtnGoalResolver::ToString(unifier.get());
+		//CHECK_EQUAL(finalUnifier, "((), ())");
+	}
+
 	TEST(HtnGoalResolverCutTests)
 	{
 		HtnGoalResolver resolver;

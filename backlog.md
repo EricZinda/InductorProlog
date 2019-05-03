@@ -1,4 +1,7 @@
-		
+- Need to make dontcare variables in the initial goal work properly (and uncomment the test that doesn't work)
+
+- Implement RetractAll
+- Implement write and nl		
 
 - Parse ?Var and Var based on switch
 - Make Adventure.pl compile properly

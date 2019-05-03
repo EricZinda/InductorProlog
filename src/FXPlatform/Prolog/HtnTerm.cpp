@@ -447,14 +447,24 @@ HtnTerm::HtnTermID HtnTerm::GetUniqueID() const
     return reinterpret_cast<HtnTermID>(this);
 }
 
-shared_ptr<HtnTerm> HtnTerm::MakeVariablesUnique(HtnTermFactory *factory, const string &uniquifier)
+shared_ptr<HtnTerm> HtnTerm::MakeVariablesUnique(HtnTermFactory *factory, const string &uniquifier, int *dontCareCount)
 {
     // Make sure we are not intermixing terms from different factories
     FailFastAssert(this->m_factory.lock().get() == factory);
 
     if(this->isVariable())
     {
-        return factory->CreateVariable(uniquifier + name());
+		if(this->name() == "_")
+		{
+			// These cannot match each other so they can't use the same uniquifier
+			shared_ptr<HtnTerm> result = factory->CreateVariable(uniquifier + name() + lexical_cast<string>(*dontCareCount));
+			(*dontCareCount) = (*dontCareCount) + 1;
+			return result;
+		}
+		else
+		{
+			return factory->CreateVariable(uniquifier + name());
+		}
     }
     else if(this->isConstant())
     {
@@ -467,7 +477,7 @@ shared_ptr<HtnTerm> HtnTerm::MakeVariablesUnique(HtnTermFactory *factory, const 
         for(vector<shared_ptr<HtnTerm>>::const_iterator argIter = m_arguments.begin(); argIter != m_arguments.end(); ++argIter)
         {
             shared_ptr<HtnTerm> term = *argIter;
-            newArguments.push_back(term->MakeVariablesUnique(factory, uniquifier));
+            newArguments.push_back(term->MakeVariablesUnique(factory, uniquifier, dontCareCount));
         }
         
         return factory->CreateFunctor(*m_namePtr, newArguments);

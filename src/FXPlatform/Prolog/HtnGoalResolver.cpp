@@ -385,6 +385,7 @@ shared_ptr<UnifierType> ResolveState::SimplifySolution(const UnifierType &soluti
 {
     // Hard-won knowledge: In case of success, the final substitution, is the composition
     // of all the MGUs involved in the resolution *restricted to the variables of the initial goals*.
+	// AND ignoring any "dontcare" variables (i.e. _)
     // Remove any variables that are not in the initial goals
     
     // First: get all the variables that were in the initial goals
@@ -401,7 +402,7 @@ shared_ptr<UnifierType> ResolveState::SimplifySolution(const UnifierType &soluti
     shared_ptr<UnifierType> simplifiedSolution = shared_ptr<UnifierType>(new UnifierType());
     for(UnifierItemType item : solution)
     {
-        if(variables.find(item.first->name()) != variables.end())
+        if(item.first->name() != "_" && variables.find(item.first->name()) != variables.end())
         {
             simplifiedSolution->push_back(item);
         }

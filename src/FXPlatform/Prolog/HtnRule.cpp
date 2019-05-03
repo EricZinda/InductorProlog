@@ -13,11 +13,13 @@ using namespace std;
 
 shared_ptr<HtnRule> HtnRule::MakeVariablesUnique(HtnRuleSet *prog, HtnTermFactory *factory, const string &uniquifier) const
 {
-    shared_ptr<HtnTerm> newHead = this->head()->MakeVariablesUnique(factory, uniquifier);
+	// Don't care variables can't match
+	int dontCareCount = 0;
+    shared_ptr<HtnTerm> newHead = this->head()->MakeVariablesUnique(factory, uniquifier, &dontCareCount);
     vector<shared_ptr<HtnTerm>> newTail;
     for(shared_ptr<HtnTerm> term : this->tail())
     {
-        newTail.push_back(term->MakeVariablesUnique(factory, uniquifier));
+        newTail.push_back(term->MakeVariablesUnique(factory, uniquifier, &dontCareCount));
     }
     
     shared_ptr<HtnRule> newRule = shared_ptr<HtnRule>(new HtnRule(newHead, newTail));

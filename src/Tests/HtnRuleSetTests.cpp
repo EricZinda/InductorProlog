@@ -120,15 +120,10 @@ SUITE(HtnRuleSetTests)
             "Head1(?X) => After(?X)"
         });
 
-        // Ground rules and facts must be unique
+        // Ground facts must be unique
         // Not OK to add a ground fact twice
         bool failed = false;
         try { ruleSet->AddRule(factory->CreateFunctor("Fact1", { factory->CreateConstant("Value") }), { }); }
-        catch(...) { failed = true; }
-        CHECK(failed);
-        failed = false;
-        ruleSet->AddRule(factory->CreateFunctor("Ground", { factory->CreateConstant("Value") }), { factory->CreateFunctor("Tail1", { factory->CreateVariable("X") }) });
-        try { ruleSet->AddRule(factory->CreateFunctor("Ground", { factory->CreateConstant("Value") }), { factory->CreateFunctor("Tail2", { factory->CreateVariable("X") }) }); }
         catch(...) { failed = true; }
         CHECK(failed);
         

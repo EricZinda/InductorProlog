@@ -109,7 +109,6 @@ namespace Prolog
             <
                 OrExpression<Args<
                     CharSymbol,
-                    CharacterSymbol<Underscore, FlattenType::None>,
                     CharacterSymbol<HyphenString, FlattenType::None>
                 >>,
                 ZeroOrMoreExpression
@@ -143,7 +142,7 @@ namespace Prolog
     {
     };
 
-	// Variables start with a capital letter
+	// Variables start with a capital letter or an Underscore
     // In this custom Prolog engine, a variable can also start with ? followed by any atom (I find it more readable).
     class PrologVariable : public
 		OrExpression<Args<
@@ -152,7 +151,22 @@ namespace Prolog
 				CharacterSymbol<QuestionMarkString, FlattenType::Delete>,
 				PrologAtom
 			>>,
-			PrologCapitalizedAtom
+			PrologCapitalizedAtom,
+		    AndExpression<Args
+            <
+                OrExpression<Args<
+                    CharacterSymbol<Underscore, FlattenType::None>
+                >>,
+                ZeroOrMoreExpression
+                <
+                    OrExpression<Args
+                    <
+                        CharOrNumberSymbol,
+                        CharacterSymbol<Underscore, FlattenType::None>,
+                        CharacterSymbol<HyphenString, FlattenType::None>
+                    >>
+                >
+            >>
         >, FlattenType::None, PrologSymbolID::PrologVariable, PrologVariableError>
     {
     };
