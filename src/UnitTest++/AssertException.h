@@ -2,7 +2,7 @@
 #define UNITTEST_ASSERTEXCEPTION_H
 
 #include <exception>
-
+#include <string>
 
 namespace UnitTest {
 
@@ -18,10 +18,8 @@ public:
     int LineNumber() const;
 
 private:
-	static const int descriptionSize = 512;
-    char m_description[descriptionSize];
-	static const int filenameSize = 256;
-	char m_filename[filenameSize];
+    std::string m_description;
+	std::string m_filename;
     int m_lineNumber;
 };
 
