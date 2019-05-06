@@ -5,7 +5,7 @@
 //  Created by Eric Zinda on 9/25/18.
 //  Copyright © 2018 Eric Zinda. All rights reserved.
 //
-
+#include <iostream>
 #include "FXPlatform/Prolog/HtnGoalResolver.h"
 #include "FXPlatform/Prolog/HtnRuleSet.h"
 #include "FXPlatform/Prolog/HtnTerm.h"
@@ -445,6 +445,94 @@ SUITE(HtnGoalResolverTests)
         unifier = compiler->SolveGoals();
         finalUnifier = HtnGoalResolver::ToString(unifier.get());
         CHECK_EQUAL(finalUnifier, "((?Y = letter(?X), ?Z = capital(?X)))");
+    }
+    
+    TEST(HtnGoalResolverWriteTests)
+    {
+        HtnGoalResolver resolver;
+        shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+        shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+        shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+        string testState;
+        string goals;
+        string finalUnifier;
+        shared_ptr<vector<UnifierType>> unifier;
+        
+        SetTraceFilter((int)SystemTraceType::Solver, TraceDetail::Diagnostic);
+
+        // ***** Make sure string literals work
+        compiler->Clear();
+        testState = string() +
+        "goals( write(\"Test 'of the emergency'\") ).\r\n";
+        CHECK(compiler->Compile(testState));
+        
+        // Redirect cout to catch output
+        std::stringstream out;
+        std::streambuf *coutbuf = std::cout.rdbuf(); //save old buf
+        std::cout.rdbuf(out.rdbuf()); //redirect std::cout to out.txt!
+        
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+        CHECK_EQUAL(out.str(), "Test 'of the emergency'");
+        std::cout.rdbuf(coutbuf); //reset to standard output again
+        
+        // ***** Make sure nl works
+        compiler->Clear();
+        testState = string() +
+        "goals( nl ).\r\n";
+        CHECK(compiler->Compile(testState));
+        
+        // Redirect cout to catch output
+        out = stringstream();
+        coutbuf = std::cout.rdbuf(); //save old buf
+        std::cout.rdbuf(out.rdbuf()); //redirect std::cout to out.txt!
+        
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+        stringstream newline;
+        newline << endl;
+        CHECK_EQUAL(out.str(), newline.str());
+        std::cout.rdbuf(coutbuf); //reset to standard output again
+
+        // ***** Make sure writeln works
+        compiler->Clear();
+        testState = string() +
+        "goals( writeln(\"test\") ).\r\n";
+        CHECK(compiler->Compile(testState));
+        
+        // Redirect cout to catch output
+        out = stringstream();
+        coutbuf = std::cout.rdbuf(); //save old buf
+        std::cout.rdbuf(out.rdbuf()); //redirect std::cout to out.txt!
+        
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+        newline = stringstream();
+        newline << "test" << endl;
+        CHECK_EQUAL(out.str(), newline.str());
+        std::cout.rdbuf(coutbuf); //reset to standard output again
+        
+        // ***** Make sure variables aren't unified
+        compiler->Clear();
+        testState = string() +
+        "itemsInBag(Name1, Name1). \r\n" +
+        "itemsInBag(Name2, Name3). \r\n" +
+        "goals( write(itemsInBag(?X)) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        
+        // Redirect cout to catch output
+        out = stringstream();
+        coutbuf = std::cout.rdbuf(); //save old buf
+        std::cout.rdbuf(out.rdbuf()); //redirect std::cout to out.txt!
+        
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+        CHECK_EQUAL(out.str(), "itemsInBag(?X)");
+        std::cout.rdbuf(coutbuf); //reset to standard output again
     }
     
 	TEST(HtnGoalResolverVariableTests)

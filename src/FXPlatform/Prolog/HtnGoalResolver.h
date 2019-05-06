@@ -55,6 +55,7 @@ private:
     static void RuleDistinct(ResolveState *state);
     static void RuleFirst(ResolveState *state);
     static void RuleIs(ResolveState *state);
+    static void RuleNewline(ResolveState *state);
     static void RuleNot(ResolveState *state);
     static void RulePrint(ResolveState *state);
 	static void RuleRetract(ResolveState* state);
@@ -63,6 +64,7 @@ private:
     static void RuleTermCompare(ResolveState *state);
     static void RuleTrace(ResolveState *state);
     static void RuleUnify(ResolveState *state);
+    static void RuleWrite(ResolveState *state);
     static void SubstituteAllVariables(HtnTermFactory *factory, std::shared_ptr<HtnTerm> newTerm, std::shared_ptr<HtnTerm> existingVariable, std::vector<std::pair<std::shared_ptr<HtnTerm>, std::shared_ptr<HtnTerm>>> &stack, UnifierType &solution);
 
     typedef std::map<std::string, CustomRuleType> CustomRulesType;

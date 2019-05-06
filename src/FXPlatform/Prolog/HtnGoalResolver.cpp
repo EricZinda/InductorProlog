@@ -5,6 +5,7 @@
 //  Created by Eric Zinda on 9/29/18.
 //  Copyright © 2018 Eric Zinda. All rights reserved.
 //
+#include <iostream>
 #include <algorithm>
 #include "Logger.h"
 #include "HtnArithmeticOperators.h"
@@ -429,6 +430,7 @@ HtnGoalResolver::HtnGoalResolver()
     AddCustomRule("is", std::bind(&HtnGoalResolver::RuleIs, std::placeholders::_1));
     AddCustomRule("max", std::bind(&HtnGoalResolver::RuleAggregate, std::placeholders::_1));
     AddCustomRule("min", std::bind(&HtnGoalResolver::RuleAggregate, std::placeholders::_1));
+    AddCustomRule("nl", std::bind(&HtnGoalResolver::RuleNewline, std::placeholders::_1));
     AddCustomRule("not", std::bind(&HtnGoalResolver::RuleNot, std::placeholders::_1));
     AddCustomRule("print", std::bind(&HtnGoalResolver::RulePrint, std::placeholders::_1));
     AddCustomRule("sortBy", std::bind(&HtnGoalResolver::RuleSortBy, std::placeholders::_1));
@@ -436,6 +438,8 @@ HtnGoalResolver::HtnGoalResolver()
 	AddCustomRule("retract", std::bind(&HtnGoalResolver::RuleRetract, std::placeholders::_1));
     AddCustomRule("retractall", std::bind(&HtnGoalResolver::RuleRetractAll, std::placeholders::_1));
     AddCustomRule("showTraces", std::bind(&HtnGoalResolver::RuleTrace, std::placeholders::_1));
+    AddCustomRule("write", std::bind(&HtnGoalResolver::RuleWrite, std::placeholders::_1));
+    AddCustomRule("writeln", std::bind(&HtnGoalResolver::RuleWrite, std::placeholders::_1));
     AddCustomRule("==", std::bind(&HtnGoalResolver::RuleTermCompare, std::placeholders::_1));
     AddCustomRule("\\==", std::bind(&HtnGoalResolver::RuleTermCompare, std::placeholders::_1));
     AddCustomRule("=", std::bind(&HtnGoalResolver::RuleUnify, std::placeholders::_1));
@@ -1369,6 +1373,43 @@ void HtnGoalResolver::RuleIs(ResolveState *state)
     }
 }
 
+void HtnGoalResolver::RuleNewline(ResolveState *state)
+{
+    shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
+    shared_ptr<HtnTerm> goal = currentNode->currentGoal();
+    shared_ptr<vector<shared_ptr<ResolveNode>>> &resolveStack = state->resolveStack;
+    HtnTermFactory *termFactory = state->termFactory;
+    
+    switch(currentNode->continuePoint)
+    {
+        case ResolveContinuePoint::CustomStart:
+        {
+            string opName = currentNode->currentGoal()->name();
+            if(goal->arguments().size() != 0)
+            {
+                // Invalid program
+                Trace2("ERROR      ", "nl() must have zero terms: {1}", state->initialIndent + resolveStack->size(), state->fullTrace, opName, goal->ToString());
+                StaticFailFastAssert(false);
+                currentNode->continuePoint = ResolveContinuePoint::ProgramError;
+            }
+            else
+            {
+                cout << endl;
+                
+                // Rule resolves to true so no new terms, no unifiers got added since it was ground so no changes there
+                // Nothing to process on children so no special return handling
+                resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
+                currentNode->continuePoint = ResolveContinuePoint::Return;
+            }
+        }
+        break;
+            
+        default:
+            StaticFailFastAssert(false);
+            break;
+    }
+}
+
 void HtnGoalResolver::RuleNot(ResolveState *state)
 {
     shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
@@ -1575,7 +1616,6 @@ void HtnGoalResolver::RulePrint(ResolveState *state)
             break;
     }
 }
-
 
 // sortBy(?v, [e](l))
 // where ?v is a variable symbol, e is a comparison operator, and l is a logical expression.
@@ -1825,6 +1865,54 @@ void HtnGoalResolver::RuleUnify(ResolveState *state)
                     resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, { *result }, &(state->uniquifier)));
                     currentNode->continuePoint = ResolveContinuePoint::Return;
                 }
+            }
+        }
+        break;
+            
+        default:
+            StaticFailFastAssert(false);
+            break;
+    }
+}
+
+void HtnGoalResolver::RuleWrite(ResolveState *state)
+{
+    shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
+    shared_ptr<HtnTerm> goal = currentNode->currentGoal();
+    shared_ptr<vector<shared_ptr<ResolveNode>>> &resolveStack = state->resolveStack;
+    HtnTermFactory *termFactory = state->termFactory;
+    
+    switch(currentNode->continuePoint)
+    {
+        case ResolveContinuePoint::CustomStart:
+        {
+            string opName = currentNode->currentGoal()->name();
+            if(goal->arguments().size() != 1)
+            {
+                // Invalid program
+                Trace2("ERROR      ", "{0}() must have one term: {1}", state->initialIndent + resolveStack->size(), state->fullTrace, opName, goal->ToString());
+                StaticFailFastAssert(false);
+                currentNode->continuePoint = ResolveContinuePoint::ProgramError;
+            }
+            else
+            {
+                if(opName == "write")
+                {
+                    cout << HtnTerm::ToString(goal->arguments(), false);
+                }
+                else if(opName == "writeln")
+                {
+                    cout << HtnTerm::ToString(goal->arguments(), false) << endl;
+                }
+                else
+                {
+                    StaticFailFastAssert(false);
+                }
+                
+                // Rule resolves to true so no new terms, no unifiers got added since it was ground so no changes there
+                // Nothing to process on children so no special return handling
+                resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
+                currentNode->continuePoint = ResolveContinuePoint::Return;
             }
         }
         break;
