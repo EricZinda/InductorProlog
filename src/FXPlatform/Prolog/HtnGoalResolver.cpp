@@ -394,7 +394,15 @@ shared_ptr<UnifierType> ResolveState::SimplifySolution(const UnifierType &soluti
     {
         vector<string> termVariables;
         term->GetAllVariables(&termVariables);
-        variables.insert(termVariables.begin(), termVariables.end());
+        
+        // Ignore any that start with "_"
+        for(auto item : termVariables)
+        {
+            if(item[0] != '_')
+            {
+                variables.insert(item);
+            }
+        }
     }
     
     // Substitute all the variables from back to front
@@ -579,6 +587,20 @@ bool HtnGoalResolver::IsGround(UnifierType *unifier)
     return true;
 }
 
+vector<shared_ptr<HtnTerm>> HtnGoalResolver::ReplaceDontCareVariables(HtnTermFactory *termFactory, const vector<shared_ptr<HtnTerm>> &initialGoals)
+{
+    vector<shared_ptr<HtnTerm>> replacedGoals;
+    string uniquifier;
+    int dontCareCount = 0;
+    for(auto item : initialGoals)
+    {
+        shared_ptr<HtnTerm> current = item->MakeVariablesUnique(termFactory, true, uniquifier, &dontCareCount);
+        replacedGoals.push_back(current);
+    }
+    
+    return replacedGoals;
+}
+
 // returns null if no solution
 // returns a single empty UnifierType for "true" solution
 // otherwise returns an array of UnifierTypes for all the solutions
@@ -586,7 +608,9 @@ shared_ptr<vector<UnifierType>> HtnGoalResolver::ResolveAll(HtnTermFactory *term
 {
     Trace3("ALL BEGIN  ", "goals:{0}, termStrings:{1}, termOther:{2}", initialIndent, false, HtnTerm::ToString(initialGoals), termFactory->stringSize(), termFactory->otherAllocationSize());
 
-    shared_ptr<ResolveState> state = shared_ptr<ResolveState>(new ResolveState(termFactory, prog, initialGoals, initialIndent, memoryBudget));
+    // We keep the variable names the user choose in the initial goals because them returned with the names they wanted when we are done
+    // However, any "_" variables need to be replaced by unique names so they don't get treated as the same variable (called "_") when we resolve.
+    shared_ptr<ResolveState> state = shared_ptr<ResolveState>(new ResolveState(termFactory, prog, ReplaceDontCareVariables(termFactory, initialGoals), initialIndent, memoryBudget));
     shared_ptr<vector<UnifierType>> solutions = shared_ptr<vector<UnifierType>>(new vector<UnifierType>());
     while(true)
     {

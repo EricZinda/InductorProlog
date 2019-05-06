@@ -65,7 +65,7 @@ public:
     void SetInterned() { m_isInterned = true; };
     bool isTrue() const { return !m_isVariable && *m_namePtr == "true"; }
     bool isVariable() const { return m_isVariable; }
-    std::shared_ptr<HtnTerm> MakeVariablesUnique(HtnTermFactory *factory, const std::string &uniquifier, int* dontCareCount);
+    std::shared_ptr<HtnTerm> MakeVariablesUnique(HtnTermFactory *factory, bool onlyDontCareVariables, const std::string &uniquifier, int* dontCareCount);
     std::string name() const { return m_isVariable ? m_namePtr->substr(1, m_namePtr->size() - 1) : *m_namePtr; }
     bool OccursCheck(std::shared_ptr<HtnTerm> variable) const;
     bool operator==(const HtnTerm &other) const;

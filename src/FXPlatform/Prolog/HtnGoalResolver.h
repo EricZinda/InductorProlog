@@ -48,6 +48,7 @@ public:
     static std::shared_ptr<UnifierType> Unify(HtnTermFactory *factory, std::shared_ptr<HtnTerm> term1, std::shared_ptr<HtnTerm> term2);
 
 private:
+    static std::vector<std::shared_ptr<HtnTerm>> ReplaceDontCareVariables(HtnTermFactory *termFactory, const std::vector<std::shared_ptr<HtnTerm>> &initialGoals);
     static void RuleAggregate(ResolveState *state);
 	static void RuleAssert(ResolveState* state);
     static void RuleCount(ResolveState *state);

@@ -447,7 +447,7 @@ HtnTerm::HtnTermID HtnTerm::GetUniqueID() const
     return reinterpret_cast<HtnTermID>(this);
 }
 
-shared_ptr<HtnTerm> HtnTerm::MakeVariablesUnique(HtnTermFactory *factory, const string &uniquifier, int *dontCareCount)
+shared_ptr<HtnTerm> HtnTerm::MakeVariablesUnique(HtnTermFactory *factory, bool onlyDontCareVariables, const string &uniquifier, int *dontCareCount)
 {
     // Make sure we are not intermixing terms from different factories
     FailFastAssert(factory != nullptr && this->m_factory.lock().get() == factory);
@@ -461,6 +461,10 @@ shared_ptr<HtnTerm> HtnTerm::MakeVariablesUnique(HtnTermFactory *factory, const 
 			(*dontCareCount) = (*dontCareCount) + 1;
 			return result;
 		}
+        else if(onlyDontCareVariables)
+        {
+            return this->shared_from_this();
+        }
 		else
 		{
 			return factory->CreateVariable(uniquifier + name());
@@ -477,7 +481,7 @@ shared_ptr<HtnTerm> HtnTerm::MakeVariablesUnique(HtnTermFactory *factory, const 
         for(vector<shared_ptr<HtnTerm>>::const_iterator argIter = m_arguments.begin(); argIter != m_arguments.end(); ++argIter)
         {
             shared_ptr<HtnTerm> term = *argIter;
-            newArguments.push_back(term->MakeVariablesUnique(factory, uniquifier, dontCareCount));
+            newArguments.push_back(term->MakeVariablesUnique(factory, false, uniquifier, dontCareCount));
         }
         
         return factory->CreateFunctor(*m_namePtr, newArguments);
@@ -594,7 +598,6 @@ public:
     HtnTerm *m_term;
 };
 
-// This depends on the fact that variables always share the same pointer
 shared_ptr<HtnTerm> HtnTerm::SubstituteTermForVariable(HtnTermFactory *factory, shared_ptr<HtnTerm> newTerm, shared_ptr<HtnTerm> existingVariable)
 {
     // Make sure we are not intermixing terms from different factories

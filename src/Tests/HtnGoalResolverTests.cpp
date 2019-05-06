@@ -495,18 +495,17 @@ SUITE(HtnGoalResolverTests)
 		finalUnifier = HtnGoalResolver::ToString(unifier.get());
 		CHECK_EQUAL(finalUnifier, "((), (), (), ())");
 
-		// TODO: Make this test work
-		//// ***** Don't care variables aren't mapped to be the same name, they are always different 
-		//// Also: Need to work in initial goal
-		//compiler->Clear();
-		//testState = string() +
-		//	"itemsInBag(Name1, Name1). \r\n" +
-		//	"itemsInBag(Name2, Name3). \r\n" +
-		//	"goals( itemsInBag(_, _) ).\r\n";
-		//CHECK(compiler->Compile(testState));
-		//unifier = compiler->SolveGoals();
-		//finalUnifier = HtnGoalResolver::ToString(unifier.get());
-		//CHECK_EQUAL(finalUnifier, "((), ())");
+        // ***** Don't care variables aren't mapped to be the same name, they are always different 
+        // Also: Need to work in initial goal
+        compiler->Clear();
+        testState = string() +
+            "itemsInBag(Name1, Name1). \r\n" +
+            "itemsInBag(Name2, Name3). \r\n" +
+            "goals( itemsInBag(_, _) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((), ())");
 	}
 
 	TEST(HtnGoalResolverCutTests)
