@@ -907,16 +907,18 @@ void HtnGoalResolver::RuleAggregate(ResolveState *state)
                 StaticFailFastAssert(false);
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
-            
-            // Make sure we keep around the value of ?Variable and any variables in the rest of the resolvent (they won't be there when we do the resolve, so they will get stripped out)
-            shared_ptr<ResolveNode::TermSetType> variablesToKeep = shared_ptr<ResolveNode::TermSetType>(new ResolveNode::TermSetType());
-            for(shared_ptr<HtnTerm> term : *currentNode->resolvent())
+            else
             {
-                term->GetAllVariables(variablesToKeep.get());
+                // Make sure we keep around the value of ?Variable and any variables in the rest of the resolvent (they won't be there when we do the resolve, so they will get stripped out)
+                shared_ptr<ResolveNode::TermSetType> variablesToKeep = shared_ptr<ResolveNode::TermSetType>(new ResolveNode::TermSetType());
+                for(shared_ptr<HtnTerm> term : *currentNode->resolvent())
+                {
+                    term->GetAllVariables(variablesToKeep.get());
+                }
+                
+                // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
+                currentNode->PushStandaloneResolve(state, variablesToKeep, goal->arguments().rbegin(), --(--goal->arguments().rend()), ResolveContinuePoint::CustomContinue1);
             }
-            
-            // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
-            currentNode->PushStandaloneResolve(state, variablesToKeep, goal->arguments().rbegin(), --(--goal->arguments().rend()), ResolveContinuePoint::CustomContinue1);
         }
         break;
             
@@ -1015,6 +1017,74 @@ void HtnGoalResolver::RuleAggregate(ResolveState *state)
     }
 }
 
+void HtnGoalResolver::RuleAssert(ResolveState* state)
+{
+	shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
+	shared_ptr<HtnTerm> goal = currentNode->currentGoal();
+	shared_ptr<vector<shared_ptr<ResolveNode>>>& resolveStack = state->resolveStack;
+	HtnTermFactory* termFactory = state->termFactory;
+	HtnRuleSet* prog = state->prog;
+
+	switch (currentNode->continuePoint)
+	{
+		case ResolveContinuePoint::CustomStart:
+		{
+			// the assert rule needs a single term
+			if (goal->arguments().size() != 1)
+			{
+				// Invalid program
+				Trace1("ERROR      ", "assert() must have exactly one term: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+				StaticFailFastAssert(false);
+				currentNode->continuePoint = ResolveContinuePoint::ProgramError;
+			}
+            else
+            {
+                shared_ptr<HtnTerm> term = goal->arguments()[0];
+                vector<shared_ptr<HtnTerm>> assertList;
+                if (term->isGround())
+                {
+                    assertList.push_back(term);
+                }
+                else
+                {
+                    // TODO: What to do?
+                    StaticFailFastAssert(false);
+
+                    //prog->AllRules([&](const HtnRule & item)
+                    //	{
+                    //		if (item.IsFact() && item.head()->isEquivalentCompoundTerm(term))
+                    //		{
+                    //			shared_ptr<UnifierType> sub = Unify(termFactory, item.head(), term);
+                    //			if (sub != nullptr)
+                    //			{
+                    //				shared_ptr<HtnTerm> newTerm = SubstituteUnifiers(termFactory, *sub, term);
+                    //				// Should be ground since we are unifying with a fact
+                    //				StaticFailFastAssert(newTerm->isGround());
+                    //				assertList.push_back(newTerm);
+                    //			}
+                    //		}
+
+                    //		return true;
+                    //	});
+                }
+
+                // Add all the facst into the database.
+                prog->Update(termFactory, {}, assertList);
+
+                // Rule resolves to true so no new terms, no unifiers got added since it it is not unified
+                // Nothing to process on children so no special return handling
+                resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
+                currentNode->continuePoint = ResolveContinuePoint::Return;
+            }
+		}
+		break;
+
+		default:
+			StaticFailFastAssert(false);
+			break;
+	}
+}
+
 // Count will evaluate ALL of the potential resolutions and then only return the Number of them, if it fails the count is zero and count will NOT fail
 // No bindings will be passed along from Count but it will resolve to the total # of solutions we found
 void HtnGoalResolver::RuleCount(ResolveState *state)
@@ -1037,9 +1107,11 @@ void HtnGoalResolver::RuleCount(ResolveState *state)
                 StaticFailFastAssert(false);
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
-
-            // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
-            currentNode->PushStandaloneResolve(state, nullptr, goal->arguments().rbegin(), --goal->arguments().rend(), ResolveContinuePoint::CustomContinue1);
+            else
+            {
+                // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
+                currentNode->PushStandaloneResolve(state, nullptr, goal->arguments().rbegin(), --goal->arguments().rend(), ResolveContinuePoint::CustomContinue1);
+            }
         }
         break;
 
@@ -1097,16 +1169,18 @@ void HtnGoalResolver::RuleDistinct(ResolveState *state)
                 StaticFailFastAssert(false);
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
-
-            // Make sure we keep around the value of ?Variable and any variables in the rest of the resolvent (they won't be there when we do the resolve, so they will get stripped out)
-            shared_ptr<ResolveNode::TermSetType> variablesToKeep = shared_ptr<ResolveNode::TermSetType>(new ResolveNode::TermSetType());
-            for(shared_ptr<HtnTerm> term : *currentNode->resolvent())
+            else
             {
-                term->GetAllVariables(variablesToKeep.get());
-            }
+                // Make sure we keep around the value of ?Variable and any variables in the rest of the resolvent (they won't be there when we do the resolve, so they will get stripped out)
+                shared_ptr<ResolveNode::TermSetType> variablesToKeep = shared_ptr<ResolveNode::TermSetType>(new ResolveNode::TermSetType());
+                for(shared_ptr<HtnTerm> term : *currentNode->resolvent())
+                {
+                    term->GetAllVariables(variablesToKeep.get());
+                }
 
-            // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
-            currentNode->PushStandaloneResolve(state, variablesToKeep, goal->arguments().rbegin(), --goal->arguments().rend(), ResolveContinuePoint::CustomContinue1);
+                // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
+                currentNode->PushStandaloneResolve(state, variablesToKeep, goal->arguments().rbegin(), --goal->arguments().rend(), ResolveContinuePoint::CustomContinue1);
+            }
         }
             break;
             
@@ -1346,72 +1420,6 @@ void HtnGoalResolver::RuleNot(ResolveState *state)
     }
 }
 
-void HtnGoalResolver::RuleAssert(ResolveState* state)
-{
-	shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
-	shared_ptr<HtnTerm> goal = currentNode->currentGoal();
-	shared_ptr<vector<shared_ptr<ResolveNode>>>& resolveStack = state->resolveStack;
-	HtnTermFactory* termFactory = state->termFactory;
-	HtnRuleSet* prog = state->prog;
-
-	switch (currentNode->continuePoint)
-	{
-		case ResolveContinuePoint::CustomStart:
-		{
-			// the assert rule needs a single term
-			if (goal->arguments().size() != 1)
-			{
-				// Invalid program
-				Trace1("ERROR      ", "assert() must have exactly one term: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
-				StaticFailFastAssert(false);
-				currentNode->continuePoint = ResolveContinuePoint::ProgramError;
-			}
-
-			shared_ptr<HtnTerm> term = goal->arguments()[0];
-			vector<shared_ptr<HtnTerm>> assertList;
-			if (term->isGround())
-			{
-				assertList.push_back(term);
-			}
-			else
-			{
-				// TODO: What to do?
-				StaticFailFastAssert(false);
-
-				//prog->AllRules([&](const HtnRule & item)
-				//	{
-				//		if (item.IsFact() && item.head()->isEquivalentCompoundTerm(term))
-				//		{
-				//			shared_ptr<UnifierType> sub = Unify(termFactory, item.head(), term);
-				//			if (sub != nullptr)
-				//			{
-				//				shared_ptr<HtnTerm> newTerm = SubstituteUnifiers(termFactory, *sub, term);
-				//				// Should be ground since we are unifying with a fact
-				//				StaticFailFastAssert(newTerm->isGround());
-				//				assertList.push_back(newTerm);
-				//			}
-				//		}
-
-				//		return true;
-				//	});
-			}
-
-			// Add all the facst into the database.
-			prog->Update(termFactory, {}, assertList);
-
-			// Rule resolves to true so no new terms, no unifiers got added since it it is not unified
-			// Nothing to process on children so no special return handling
-			resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
-			currentNode->continuePoint = ResolveContinuePoint::Return;
-		}
-		break;
-
-		default:
-			StaticFailFastAssert(false);
-			break;
-	}
-}
-
 void HtnGoalResolver::RuleRetractAll(ResolveState* state)
 {
     shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
@@ -1432,37 +1440,39 @@ void HtnGoalResolver::RuleRetractAll(ResolveState* state)
                 StaticFailFastAssert(false);
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
-            
-            shared_ptr<HtnTerm> term = goal->arguments()[0];
-            vector<shared_ptr<HtnTerm>> factsToRemove;
-            prog->AllRules([&](const HtnRule &item)
-               {
-                   // We only remove facts, so skip rules
-                   // Don't bother if they are not "equivalent" (i.e. the name and term count doesn't match)
-                   // because it can't unify
-                   if(item.IsFact() && (item.head()->isEquivalentCompoundTerm(term)))
-                   {
-                       shared_ptr<UnifierType> sub = HtnGoalResolver::Unify(termFactory, item.head(), term);
-                       
-                       if(sub != nullptr)
-                       {
-                           factsToRemove.push_back(item.head());
-                       }
-                   }
-                   
-                   // Keep going
-                   return true;
-               });
-            
-            if(factsToRemove.size() > 0)
+            else
             {
-                prog->Update(termFactory, factsToRemove, {});
+                shared_ptr<HtnTerm> term = goal->arguments()[0];
+                vector<shared_ptr<HtnTerm>> factsToRemove;
+                prog->AllRules([&](const HtnRule &item)
+                   {
+                       // We only remove facts, so skip rules
+                       // Don't bother if they are not "equivalent" (i.e. the name and term count doesn't match)
+                       // because it can't unify
+                       if(item.IsFact() && (item.head()->isEquivalentCompoundTerm(term)))
+                       {
+                           shared_ptr<UnifierType> sub = HtnGoalResolver::Unify(termFactory, item.head(), term);
+                           
+                           if(sub != nullptr)
+                           {
+                               factsToRemove.push_back(item.head());
+                           }
+                       }
+                       
+                       // Keep going
+                       return true;
+                   });
+                
+                if(factsToRemove.size() > 0)
+                {
+                    prog->Update(termFactory, factsToRemove, {});
+                }
+                
+                // Rule resolves to true so no new terms, no unifiers got added since it it is not unified
+                // Nothing to process on children so no special return handling
+                resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
+                currentNode->continuePoint = ResolveContinuePoint::Return;
             }
-            
-            // Rule resolves to true so no new terms, no unifiers got added since it it is not unified
-            // Nothing to process on children so no special return handling
-            resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
-            currentNode->continuePoint = ResolveContinuePoint::Return;
         }
         break;
             
@@ -1492,43 +1502,45 @@ void HtnGoalResolver::RuleRetract(ResolveState* state)
 				StaticFailFastAssert(false);
 				currentNode->continuePoint = ResolveContinuePoint::ProgramError;
 			}
+            else
+            {
+                shared_ptr<HtnTerm> term = goal->arguments()[0];
+                vector<shared_ptr<HtnTerm>> retractList;
+                if (term->isGround())
+                {
+                    retractList.push_back(term);
+                }
+                else
+                {
+                    // TODO: What to do?
+                    StaticFailFastAssert(false);
+                    //prog->AllRules([&](const HtnRule & item)
+                    //	{
+                    //		if (item.IsFact() && item.head()->isEquivalentCompoundTerm(term))
+                    //		{
+                    //			shared_ptr<UnifierType> sub = Unify(termFactory, item.head(), term);
+                    //			if (sub != nullptr)
+                    //			{
+                    //				shared_ptr<HtnTerm> newTerm = SubstituteUnifiers(termFactory, *sub, term);
+                    //				// Should be ground since we are unifying with a fact
+                    //				StaticFailFastAssert(newTerm->isGround());
+                    //				retractList.push_back(newTerm);
+                    //			}
+                    //		}
 
-			shared_ptr<HtnTerm> term = goal->arguments()[0];
-			vector<shared_ptr<HtnTerm>> retractList;
-			if (term->isGround())
-			{
-				retractList.push_back(term);
-			}
-			else
-			{
-				// TODO: What to do?
-				StaticFailFastAssert(false);
-				//prog->AllRules([&](const HtnRule & item)
-				//	{
-				//		if (item.IsFact() && item.head()->isEquivalentCompoundTerm(term))
-				//		{
-				//			shared_ptr<UnifierType> sub = Unify(termFactory, item.head(), term);
-				//			if (sub != nullptr)
-				//			{
-				//				shared_ptr<HtnTerm> newTerm = SubstituteUnifiers(termFactory, *sub, term);
-				//				// Should be ground since we are unifying with a fact
-				//				StaticFailFastAssert(newTerm->isGround());
-				//				retractList.push_back(newTerm);
-				//			}
-				//		}
+                    //		return true;
+                    //	});
+                }
 
-				//		return true;
-				//	});
-			}
+                // Remove this fact into the database.
+                prog->Update(termFactory, retractList, {});
 
-			// Remove this fact into the database.  
-			prog->Update(termFactory, retractList, {});
-
-			// Rule resolves to true so no new terms, no unifiers got added since it it is not unified
-			// Nothing to process on children so no special return handling
-			resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
-			currentNode->continuePoint = ResolveContinuePoint::Return;
-		}
+                // Rule resolves to true so no new terms, no unifiers got added since it it is not unified
+                // Nothing to process on children so no special return handling
+                resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
+                currentNode->continuePoint = ResolveContinuePoint::Return;
+            }
+        }
 		break;
 
 		default:
@@ -1588,16 +1600,18 @@ void HtnGoalResolver::RuleSortBy(ResolveState *state)
                 StaticFailFastAssert(false);
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
-
-            // Make sure we keep around the value of ?Variable and any variables in the rest of the resolvent (they won't be there when we do the resolve, so they will get stripped out)
-            shared_ptr<ResolveNode::TermSetType> variablesToKeep = shared_ptr<ResolveNode::TermSetType>(new ResolveNode::TermSetType());
-            for(shared_ptr<HtnTerm> term : *currentNode->resolvent())
+            else
             {
-                term->GetAllVariables(variablesToKeep.get());
-            }
+                // Make sure we keep around the value of ?Variable and any variables in the rest of the resolvent (they won't be there when we do the resolve, so they will get stripped out)
+                shared_ptr<ResolveNode::TermSetType> variablesToKeep = shared_ptr<ResolveNode::TermSetType>(new ResolveNode::TermSetType());
+                for(shared_ptr<HtnTerm> term : *currentNode->resolvent())
+                {
+                    term->GetAllVariables(variablesToKeep.get());
+                }
 
-            // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
-            currentNode->PushStandaloneResolve(state, variablesToKeep, goal->arguments()[1]->arguments().rbegin(), goal->arguments()[1]->arguments().rend(), ResolveContinuePoint::CustomContinue1);
+                // Run the resolver just on the arguments as if it were a standalone resolution.  Then continue on depending on what happens
+                currentNode->PushStandaloneResolve(state, variablesToKeep, goal->arguments()[1]->arguments().rbegin(), goal->arguments()[1]->arguments().rend(), ResolveContinuePoint::CustomContinue1);
+            }
         }
         break;
             

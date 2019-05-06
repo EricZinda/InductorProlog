@@ -1,6 +1,7 @@
+- Implement write and nl		
+
 - retract should unify its term and including the binding for subsequent terms
 - do a test where you retract and fail as a poor mans retractall
-- Implement write and nl		
 
 - Parse ?Var and Var based on switch
 - Make Adventure.pl compile properly
