@@ -495,7 +495,7 @@ SUITE(HtnGoalResolverTests)
 		finalUnifier = HtnGoalResolver::ToString(unifier.get());
 		CHECK_EQUAL(finalUnifier, "((), (), (), ())");
 
-        // ***** Don't care variables aren't mapped to be the same name, they are always different 
+        // ***** Don't care variables aren't mapped to be the same name, they are always different
         // Also: Need to work in initial goal
         compiler->Clear();
         testState = string() +
@@ -688,6 +688,20 @@ SUITE(HtnGoalResolverTests)
 		CHECK_EQUAL(finalUnifier, "((?After = Name2))");
 		CHECK(!state->DebugHasRule("itemsInBag(Name1)", ""));
 
+        // ***** single retract() goal with a variable that needs to be bound
+        compiler->Clear();
+        testState = string() +
+        "itemsInBag(Name1). \r\n" +
+        "itemsInBag(Name2). \r\n" +
+        "goals( retractall(itemsInBag(?X)) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+        CHECK(!state->DebugHasRule("itemsInBag(Name1)", ""));
+        CHECK(!state->DebugHasRule("itemsInBag(Name2)", ""));
+
+        
 		// TODO: figure out how to make this work
 		//// ***** 
 		//compiler->Clear();

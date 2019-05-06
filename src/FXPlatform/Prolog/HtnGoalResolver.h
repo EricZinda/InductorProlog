@@ -58,6 +58,7 @@ private:
     static void RuleNot(ResolveState *state);
     static void RulePrint(ResolveState *state);
 	static void RuleRetract(ResolveState* state);
+    static void RuleRetractAll(ResolveState* state);
 	static void RuleSortBy(ResolveState *state);
     static void RuleTermCompare(ResolveState *state);
     static void RuleTrace(ResolveState *state);

@@ -434,6 +434,7 @@ HtnGoalResolver::HtnGoalResolver()
     AddCustomRule("sortBy", std::bind(&HtnGoalResolver::RuleSortBy, std::placeholders::_1));
     AddCustomRule("sum", std::bind(&HtnGoalResolver::RuleAggregate, std::placeholders::_1));
 	AddCustomRule("retract", std::bind(&HtnGoalResolver::RuleRetract, std::placeholders::_1));
+    AddCustomRule("retractall", std::bind(&HtnGoalResolver::RuleRetractAll, std::placeholders::_1));
     AddCustomRule("showTraces", std::bind(&HtnGoalResolver::RuleTrace, std::placeholders::_1));
     AddCustomRule("==", std::bind(&HtnGoalResolver::RuleTermCompare, std::placeholders::_1));
     AddCustomRule("\\==", std::bind(&HtnGoalResolver::RuleTermCompare, std::placeholders::_1));
@@ -1409,6 +1410,66 @@ void HtnGoalResolver::RuleAssert(ResolveState* state)
 			StaticFailFastAssert(false);
 			break;
 	}
+}
+
+void HtnGoalResolver::RuleRetractAll(ResolveState* state)
+{
+    shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
+    shared_ptr<HtnTerm> goal = currentNode->currentGoal();
+    shared_ptr<vector<shared_ptr<ResolveNode>>>& resolveStack = state->resolveStack;
+    HtnTermFactory* termFactory = state->termFactory;
+    HtnRuleSet* prog = state->prog;
+    
+    switch (currentNode->continuePoint)
+    {
+        case ResolveContinuePoint::CustomStart:
+        {
+            // the retractAll rule needs a single term
+            if (goal->arguments().size() != 1)
+            {
+                // Invalid program
+                Trace1("ERROR      ", "retractall() must have exactly one term: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+                StaticFailFastAssert(false);
+                currentNode->continuePoint = ResolveContinuePoint::ProgramError;
+            }
+            
+            shared_ptr<HtnTerm> term = goal->arguments()[0];
+            vector<shared_ptr<HtnTerm>> factsToRemove;
+            prog->AllRules([&](const HtnRule &item)
+               {
+                   // We only remove facts, so skip rules
+                   // Don't bother if they are not "equivalent" (i.e. the name and term count doesn't match)
+                   // because it can't unify
+                   if(item.IsFact() && (item.head()->isEquivalentCompoundTerm(term)))
+                   {
+                       shared_ptr<UnifierType> sub = HtnGoalResolver::Unify(termFactory, item.head(), term);
+                       
+                       if(sub != nullptr)
+                       {
+                           factsToRemove.push_back(item.head());
+                       }
+                   }
+                   
+                   // Keep going
+                   return true;
+               });
+            
+            if(factsToRemove.size() > 0)
+            {
+                prog->Update(termFactory, factsToRemove, {});
+            }
+            
+            // Rule resolves to true so no new terms, no unifiers got added since it it is not unified
+            // Nothing to process on children so no special return handling
+            resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
+            currentNode->continuePoint = ResolveContinuePoint::Return;
+        }
+        break;
+            
+        default:
+            StaticFailFastAssert(false);
+            break;
+    }
 }
 
 void HtnGoalResolver::RuleRetract(ResolveState* state)
