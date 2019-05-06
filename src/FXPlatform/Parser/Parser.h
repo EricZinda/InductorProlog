@@ -152,6 +152,10 @@ Each of the rule templates have some standard arguments that can be tweaked when
         {
         }
 
+        virtual ~Symbol()
+        {
+        }
+        
         void AddSubsymbol(shared_ptr<Symbol> symbol)
         {
             FailFastAssert(symbol != nullptr);

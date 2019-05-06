@@ -121,11 +121,11 @@ private:
     InternedStringMap m_internedStrings;
     typedef std::unordered_map<const std::string **, std::weak_ptr<HtnTerm>, uniqueIDPtrHash, uniqueIDPtrEqual> InternedTermMap;
     InternedTermMap m_internedTerms;
+    int64_t m_otherAllocations;
     bool m_outOfMemory;
+    int64_t m_stringAllocations;
     std::map<std::string, std::pair<int, int>> m_termCreationTracking;
     int m_termsCreated;
-    int64_t m_stringAllocations;
-    int64_t m_otherAllocations;
     std::shared_ptr<HtnTerm> m_true;
     const std::string *m_uniqueIDBuffer[MaxIndexTerms];
     std::string const ** m_uniqueIDBufferEnd;

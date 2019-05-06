@@ -51,16 +51,16 @@ SystemTraceType::Solver, (fullTrace ? TraceDetail::Normal :TraceDetail::Diagnost
 arg1, arg2, arg3, arg4, arg5, arg6);
 
 ResolveNode::ResolveNode(shared_ptr<vector<shared_ptr<HtnTerm>>> resolventArg, shared_ptr<UnifierType> unifierArg) :
-    cachedDynamicSize(-1),
     continuePoint(ResolveContinuePoint::NextGoal),
     currentRuleIndex(-1),
+    originalGoalCount((int) resolventArg->size() - 1),
+    unifier(unifierArg),
+    cachedDynamicSize(-1),
 	isCut(false),
     isStandaloneResolve(false),
-    originalGoalCount((int) resolventArg->size() - 1),
     previousCollectAllSolutions(false),
     pushedStandaloneResolver(false),
-    m_resolvent(resolventArg),
-    unifier(unifierArg)
+    m_resolvent(resolventArg)
 {
 }
 

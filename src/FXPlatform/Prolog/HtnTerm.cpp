@@ -450,7 +450,7 @@ HtnTerm::HtnTermID HtnTerm::GetUniqueID() const
 shared_ptr<HtnTerm> HtnTerm::MakeVariablesUnique(HtnTermFactory *factory, const string &uniquifier, int *dontCareCount)
 {
     // Make sure we are not intermixing terms from different factories
-    FailFastAssert(this->m_factory.lock().get() == factory);
+    FailFastAssert(factory != nullptr && this->m_factory.lock().get() == factory);
 
     if(this->isVariable())
     {
@@ -539,7 +539,7 @@ bool HtnTerm::operator==(const HtnTerm &other) const
 shared_ptr<HtnTerm> HtnTerm::ResolveArithmeticTerms(HtnTermFactory *factory)
 {
     // Make sure we are not intermixing terms from different factories
-    FailFastAssert(this->m_factory.lock().get() == factory);
+    FailFastAssert(factory != nullptr && this->m_factory.lock().get() == factory);
 
     if(!isCompoundTerm())
     {
@@ -586,12 +586,12 @@ public:
         m_term(term)
     {
     }
-    HtnTerm *m_term;
-    shared_ptr<HtnTerm> m_returnValue;
     
+    int m_argIndex;
     // If the item is a functor, this is used
     vector<shared_ptr<HtnTerm>> m_newArguments;
-    int m_argIndex;
+    shared_ptr<HtnTerm> m_returnValue;
+    HtnTerm *m_term;
 };
 
 // This depends on the fact that variables always share the same pointer
@@ -779,7 +779,6 @@ string HtnTerm::ToString(bool isInList)
                 // This is the start of a list
                 startedList = true;
                 stream << "[";
-                isInList = true;
             }
             else
             {

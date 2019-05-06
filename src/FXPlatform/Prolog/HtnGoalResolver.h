@@ -200,10 +200,10 @@ private:
     int64_t cachedDynamicSize;
 	bool isCut;
     bool isStandaloneResolve; // True for all child nodes of a standalone resolve
-    bool pushedStandaloneResolver;
     std::shared_ptr<std::vector<UnifierType>> previousSolutions;
     std::shared_ptr<TermSetType> variablesToKeep;
     bool previousCollectAllSolutions;
+    bool pushedStandaloneResolver;
     std::shared_ptr<std::vector<std::shared_ptr<HtnTerm>>> m_resolvent;
 };
 
@@ -246,6 +246,10 @@ public:
 
     // NOTE: If you change members, remember to change dynamicSize() function too
     bool collectAllSolutions;
+    int deepestFailure;
+    std::shared_ptr<HtnTerm> deepestFailureGoal;
+    int deepestFailureOriginalGoalIndex;
+    std::string deepestFailureStack;
     bool fullTrace;
     int64_t highestMemoryUsed;
     std::string highestMemoryUsedStack;
@@ -261,10 +265,6 @@ public:
     int64_t termMemoryUsed;
     int uniquifier;
     
-    int deepestFailure;
-    std::shared_ptr<HtnTerm> deepestFailureGoal;
-    int deepestFailureOriginalGoalIndex;
-    std::string deepestFailureStack;
 
 };
 #endif /* HtnGoalResolver_hpp */

@@ -86,7 +86,7 @@ private:
         typedef std::set<HtnTerm::HtnTermID> RuleHeadsType;
         typedef std::set<std::string> RulesIndexType;
 
-        HtnSharedRules() : m_isLocked(false), m_dynamicSize(sizeof(HtnSharedRules)) {}
+        HtnSharedRules() : m_dynamicSize(sizeof(HtnSharedRules)), m_isLocked(false) {}
         const RulesType &allRules() { return m_rules; }
         void AddRule(std::shared_ptr<HtnTerm> head, std::vector<std::shared_ptr<HtnTerm>> m_tail);
         void ClearAll();

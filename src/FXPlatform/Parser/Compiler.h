@@ -11,9 +11,9 @@ namespace FXPlat
     {
     public:
         CompileError(int line, int column, const string &errorString) :
-            m_line(line),
             m_column(column),
-            m_error(errorString)
+            m_error(errorString),
+            m_line(line)
         {
         }
 
@@ -38,7 +38,10 @@ namespace FXPlat
     {
     public:
         typedef vector<shared_ptr<Symbol>> CompileResultType;
-
+        virtual ~Compiler()
+        {
+        }
+        
         bool CompileDocument(const string &fullPath)
         {
             shared_ptr<ifstream> stream = shared_ptr<ifstream>(new ifstream());
