@@ -10,7 +10,7 @@
 
 int main (int argc, char *argv[])
 {
-    SetTraceFilter(SystemTraceType::None, TraceDetail::Normal);
+    SetTraceFilter(SystemTraceType::Solver, TraceDetail::Diagnostic);
 
 	if(argc != 2)
 	{
@@ -33,15 +33,30 @@ int main (int argc, char *argv[])
     	if(compiler.CompileDocument(targetFileAndPath))
     	{
     		fprintf(stdout, "Succesfully compiled %s\r\n\r\nType a Prolog query or hit q to end.\r\n\r\n", targetFileAndPath.c_str());
-    		fprintf(stdout, "?");
+    		fprintf(stdout, "?- ");
 
 			PrologQueryCompiler queryCompiler(factory.get());
 	        HtnGoalResolver resolver;
 			string input;
-			std::getline(cin, input);
 			while(true)
 			{
+                input.clear();
+                string tempInput;
+                std::getline(cin, tempInput);
+                for(auto c : tempInput)
+                {
+                    // Xcode console window will pass along all backspace, arrow keys, etc instead of just the resulting text
+                    // get rid of those.
+                    // NOTE: Xcode still insists on autocompleting the right parenthesis after you type something like "a(b"
+                    // but DOES NOT pass along the second parenthesis to cin.  So, you have to type it twice when using Xcode.
+                    if(c >= 0x20 && c <= 0x7E)
+                    {
+                        input.push_back(c);
+                    }
+                }
+
 				if (input == "q") break;
+//                cout << "received: " << input << endl;
 				if(queryCompiler.Compile(input))
 				{
 					shared_ptr<vector<UnifierType>> queryResult = resolver.ResolveAll(factory.get(), state.get(), queryCompiler.result());
@@ -60,8 +75,7 @@ int main (int argc, char *argv[])
 				}
 
 				queryCompiler.Clear();
-				fprintf(stdout, "?");
-				std::getline(cin, input);
+				fprintf(stdout, "?- ");
 			}
     		return 0;
     	}

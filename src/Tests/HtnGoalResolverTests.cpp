@@ -396,7 +396,7 @@ SUITE(HtnGoalResolverTests)
         shared_ptr<vector<UnifierType>> unifier;
         
         //        SetTraceFilter((int) SystemTraceType::Planner | (int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
-        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
         
         // ***** single =() goal that fails
         compiler->Clear();
@@ -458,7 +458,7 @@ SUITE(HtnGoalResolverTests)
         string finalUnifier;
         shared_ptr<vector<UnifierType>> unifier;
         
-        SetTraceFilter((int)SystemTraceType::Solver, TraceDetail::Diagnostic);
+//        SetTraceFilter((int)SystemTraceType::Solver, TraceDetail::Diagnostic);
 
         // ***** Make sure string literals work
         compiler->Clear();
@@ -546,7 +546,7 @@ SUITE(HtnGoalResolverTests)
 		string finalUnifier;
 		shared_ptr<vector<UnifierType>> unifier;
 
-		SetTraceFilter((int)SystemTraceType::Solver, TraceDetail::Diagnostic);
+//        SetTraceFilter((int)SystemTraceType::Solver, TraceDetail::Diagnostic);
 
 		// ***** Make sure the same variables get mapped to the same renamed variables 
 		compiler->Clear();
@@ -607,8 +607,20 @@ SUITE(HtnGoalResolverTests)
 		string finalUnifier;
 		shared_ptr<vector<UnifierType>> unifier;
 
-		SetTraceFilter((int)SystemTraceType::Solver, TraceDetail::Diagnostic);
+//        SetTraceFilter((int)SystemTraceType::Solver, TraceDetail::Diagnostic);
 
+        // ***** multiple rules, fail before cut should run second rule like normal
+        compiler->Clear();
+        testState = string() +
+        "rule(?X) :- itemsInBag(?X), !."
+        "rule(?X) :- =(?X, good)."
+        "trace(?x) :- .\r\n"
+        "goals( rule(?X) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = good))");
+        
 		// ***** multiple rules, second rule doesn't run after cut 
 		compiler->Clear();
 		testState = string() +
@@ -816,7 +828,7 @@ SUITE(HtnGoalResolverTests)
         shared_ptr<vector<UnifierType>> unifier;
         
         //        SetTraceFilter((int) SystemTraceType::Planner | (int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
-        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
         
         // ***** single min() goal where all terms fail
         compiler->Clear();
@@ -889,7 +901,7 @@ SUITE(HtnGoalResolverTests)
         shared_ptr<vector<UnifierType>> unifier;
         
         //        SetTraceFilter((int) SystemTraceType::Planner | (int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
-        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
         
         // ***** single max() goal where all terms fail
         compiler->Clear();
@@ -1333,7 +1345,7 @@ SUITE(HtnGoalResolverTests)
         shared_ptr<vector<UnifierType>> unifier;
         
         //        SetTraceFilter((int) SystemTraceType::Planner | (int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
-        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
         
         // ***** single first() goal
         compiler->Clear();
@@ -1383,7 +1395,7 @@ SUITE(HtnGoalResolverTests)
         shared_ptr<vector<UnifierType>> unifier;
         
         //        SetTraceFilter((int) SystemTraceType::Planner | (int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
-        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
         
         // ***** print goal with previous and next terms
         compiler->Clear();
@@ -1422,7 +1434,7 @@ SUITE(HtnGoalResolverTests)
     
     TEST(HtnGoalResolverResolveTests)
     {
-        SetTraceFilter(SystemTraceType::Solver, TraceDetail::Diagnostic);
+//        SetTraceFilter(SystemTraceType::Solver, TraceDetail::Diagnostic);
 
         shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
         shared_ptr<HtnRuleSet> prog = shared_ptr<HtnRuleSet>(new HtnRuleSet());

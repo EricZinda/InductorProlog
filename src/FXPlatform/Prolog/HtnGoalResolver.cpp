@@ -776,6 +776,8 @@ shared_ptr<UnifierType> HtnGoalResolver::ResolveNext(ResolveState *state)
 					// Cut resolves to true so no new terms, no unifiers got added since it it is not unified
 					// Nothing to process on children so no special return handling
 					resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &uniquifier));
+                    currentNode->continuePoint = ResolveContinuePoint::Return;
+
 					Trace2("CUTSTART   ", "goal:{0}, resolvent:{1}", indentLevel, state->fullTrace, goal->ToString(), HtnTerm::ToString(*currentNode->resolvent()));
 				}
 				// We are executing a cut end, nothing happens until we get back to this point
@@ -791,6 +793,7 @@ shared_ptr<UnifierType> HtnGoalResolver::ResolveNext(ResolveState *state)
 					// Cut resolves to true so no new terms, no unifiers got added since it it is not unified
 					// Nothing to process on children so no special return handling
 					resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &uniquifier));
+
 					Trace2("CUTEND     ", "goal:{0}, resolvent:{1}", indentLevel, state->fullTrace, goal->ToString(), HtnTerm::ToString(*currentNode->resolvent()));
 				}
                 else

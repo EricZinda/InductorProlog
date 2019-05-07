@@ -1,4 +1,4 @@
-﻿//
+//
 //  AIPrologTests.cpp
 //  TestLib
 //
@@ -99,7 +99,6 @@ SUITE(PrologCompilerTests)
         // variable
         rule = TestTryParse<PrologVariable>("?a", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-
 
         // term
         rule = TestTryParse<PrologTerm>("a", deepestFailure, errorMessage);
@@ -239,5 +238,19 @@ SUITE(PrologCompilerTests)
 
         rule = TestTryParse<PrologDocument>("a(%\na%\n)%\n.%\n b(%\nb%\n)%\n.%\n a(%\nb,%\n c%\n)%\n. % This is a comment\r\n", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
+        
+        // Query
+        rule = TestTryParse<PrologQuery>("a(a).", deepestFailure, errorMessage);
+        CHECK(rule != nullptr);
+
+        rule = TestTryParse<PrologQuery>("a(a). \r\n", deepestFailure, errorMessage);
+        CHECK(rule != nullptr);
+
+        rule = TestTryParse<PrologQuery>("a(X, a). \r\n", deepestFailure, errorMessage);
+        CHECK(rule != nullptr);
+
+        rule = TestTryParse<PrologQuery>("a(?X, a). \r\n", deepestFailure, errorMessage);
+        CHECK(rule != nullptr);
+
     }
 }
