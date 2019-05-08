@@ -461,7 +461,17 @@ shared_ptr<vector<RuleBindingType>> HtnGoalResolver::FindAllRulesThatUnify(HtnTe
     *highestMemoryUsedReturn = 0;
     
     shared_ptr<vector<RuleBindingType>> foundRules(new vector<RuleBindingType>());
-    if(goal->isArithmetic())
+    if(goal->isTrue())
+    {
+        // Rule resolves to true
+        shared_ptr<HtnRule> rule = shared_ptr<HtnRule>(new HtnRule(goal, {}));
+        
+        // No unifiers got added since it was ground so no changes there
+        UnifierType unifiers;
+        foundRules->push_back(RuleBindingType(rule, unifiers));
+        return foundRules;
+    }
+    else if(goal->isArithmetic())
     {
         // We don't unify Arithmetic goals with facts in the database.
         // Instead we treat them as if they were looked up against an infinity of rules that are defined by the laws of math. I.e. 1 < 2 is looked up against all the facts of math and we find one that says 1 < 2 so it is true.
@@ -469,7 +479,7 @@ shared_ptr<vector<RuleBindingType>> HtnGoalResolver::FindAllRulesThatUnify(HtnTe
         //      true, in which case we treat it like a successful unification with a true fact in the database and remove this goal depth-first search through the next goal in the list
         //      false, in which case this branch fails
         //      not executable because all variables were not bound, in which case this branch fails
-        shared_ptr<HtnTerm>term = goal->Eval(termFactory);
+        shared_ptr<HtnTerm> term = goal->Eval(termFactory);
         if(term != nullptr)
         {
             // if it is a boolean term and true, this leaf succeeds and we pretend that there was that rule in the database and return it

@@ -596,6 +596,38 @@ SUITE(HtnGoalResolverTests)
         CHECK_EQUAL(finalUnifier, "((), ())");
 	}
 
+    TEST(HtnGoalResolverTrueFalseTests)
+    {
+        HtnGoalResolver resolver;
+        shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+        shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+        shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+        string testState;
+        string goals;
+        string finalUnifier;
+        shared_ptr<vector<UnifierType>> unifier;
+        
+        //        SetTraceFilter((int)SystemTraceType::Solver, TraceDetail::Diagnostic);
+        
+        // ***** true should resolve to true
+        compiler->Clear();
+        testState = string() +
+        "goals( true ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+        
+        // ***** false should resolve to false
+        compiler->Clear();
+        testState = string() +
+        "goals( false ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "null");
+    }
+    
 	TEST(HtnGoalResolverCutTests)
 	{
 		HtnGoalResolver resolver;
