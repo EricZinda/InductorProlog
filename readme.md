@@ -36,8 +36,7 @@ If you're using a command line generator of some sort, just run `runtests` on th
 In Xcode, after you build you should change the scheme to `runtests` and then choose Product/Run.  The output of the test will appear in the Output window.
 
 
-Directory Structure
--------------------
+## Directory Structure
 99.99% of the code for the Prolog compiler is platform agnostic (or at least should be). It has been built and tested on Windows, Mac and iOS. The platform specific code is located in the iOS and Win directorys and is currently only a single function for debug logging.
 
 - /FXPlatform: 			Contains some general purpose code for tracing, asserts, strings, etc
@@ -49,8 +48,16 @@ Directory Structure
 - /UnitTest++:			The UnitTest++ framework used to write unit tests (https://github.com/unittest-cpp/unittest-cpp)
 - /Tests:				Basic smoke tests used to make sure it call compiled properly
 
-Getting Started
--------------------
+## Debugging Tips
+
+### Xcode
+If you are trying to use the built in console window in Xcode to interact with indprolog, you'll have lots of issues.  I've not found workarounds:
+- Xcode auto-closes things like () and {}, but DOES NOT send the auto-generated character to the app.  So, you'll have to delete it and retype it for things to work
+- Xcode sometimes just plain sends characters to the console window while you are editing, which will hang.  Workaround: always stop the app before editing.
+
+
+## Getting Started
+
 Read GettingStarted.md.
 
 License

@@ -10,7 +10,7 @@
 
 int main (int argc, char *argv[])
 {
-    SetTraceFilter(SystemTraceType::Solver, TraceDetail::Diagnostic);
+//    SetTraceFilter(SystemTraceType::Solver, TraceDetail::Diagnostic);
 
 	if(argc != 2)
 	{
@@ -29,7 +29,7 @@ int main (int argc, char *argv[])
 
         shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
         shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
-    	PrologCompiler compiler(factory.get(), state.get());
+    	PrologStandardCompiler compiler(factory.get(), state.get());
     	if(compiler.CompileDocument(targetFileAndPath))
     	{
     		fprintf(stdout, "Succesfully compiled %s\r\n\r\nType a Prolog query or hit q to end.\r\n\r\n", targetFileAndPath.c_str());

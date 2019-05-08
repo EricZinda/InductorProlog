@@ -13,6 +13,8 @@
 using namespace FXPlat;
 namespace Prolog
 {
+    class HtnVariable;
+    template<class VariableRule = HtnVariable>
     class PrologFunctor;
     
     // Errors
@@ -125,7 +127,9 @@ namespace Prolog
     {
     };
     
-	class PrologCapitalizedAtom : public
+    // Use this as the argument to all the rules that take "VariableRule"
+    // if you want to use the normal Prolog rule where capitalized things are variables
+	class PrologCapitalizedVariable : public
         AndExpression<Args
         <
 			CharacterSetSymbol<CapitalChar>,
@@ -142,16 +146,25 @@ namespace Prolog
     {
     };
 
-	// Variables start with a capital letter or an Underscore
-    // In this custom Prolog engine, a variable can also start with ? followed by any atom (I find it more readable).
+    // Use this as the argument to all the rules that take "VariableRule"
+    // if you want to use the "HTN" rule where you put a ? in front of things that
+    // are variables and capitalization doesn't mean anything
+	class HtnVariable : public
+        AndExpression<Args
+        <
+            CharacterSymbol<QuestionMarkString, FlattenType::Delete>,
+            PrologAtom
+        >>
+    {
+    };
+    
+    // Variables start with a (capital letter or ? depending on rule choice) or an Underscore
+    // See comments on HtnVariable and PrologCapitalizedVariable for what
+    // to pass to VariableRule
+    template<class VariableRule = HtnVariable>
     class PrologVariable : public
 		OrExpression<Args<
-			AndExpression<Args
-			<
-				CharacterSymbol<QuestionMarkString, FlattenType::Delete>,
-				PrologAtom
-			>>,
-			PrologCapitalizedAtom,
+            VariableRule,
 		    AndExpression<Args
             <
                 OrExpression<Args<
@@ -172,19 +185,21 @@ namespace Prolog
     };
 
     // A term is a variable or functor (which could have no arguments and thus be an atom)
+    template<class VariableRule = HtnVariable>
     class PrologTerm : public
     OrExpression<Args
     <
-        PrologFunctor,
-		PrologVariable
+        PrologVariable<VariableRule>,
+        PrologFunctor<VariableRule>
     >, FlattenType::Flatten, 0, PrologTermError>
     {
     };
 
+    template<class VariableRule = HtnVariable>
 	class PrologFunctorList : public
     AndExpression<Args
     <
-        PrologFunctor,
+        PrologFunctor<VariableRule>,
         PrologOptionalWhitespace,
         ZeroOrMoreExpression
         <
@@ -192,7 +207,7 @@ namespace Prolog
             <
                 CharacterSymbol<CommaString>,
                 PrologOptionalWhitespace,
-				PrologFunctor,
+				PrologFunctor<VariableRule>,
                 PrologOptionalWhitespace
             >>
         >
@@ -200,10 +215,11 @@ namespace Prolog
     {
     };
 
+    template<class VariableRule = HtnVariable>
     class PrologTermList : public
     AndExpression<Args
     <
-        PrologTerm,
+        PrologTerm<VariableRule>,
         PrologOptionalWhitespace,
         ZeroOrMoreExpression
         <
@@ -211,7 +227,7 @@ namespace Prolog
             <
                 CharacterSymbol<CommaString>,
                 PrologOptionalWhitespace,
-                PrologTerm,
+                PrologTerm<VariableRule>,
                 PrologOptionalWhitespace
             >>
         >
@@ -222,11 +238,16 @@ namespace Prolog
     // A compound term is composed of an atom called a "functor" and a number of "arguments", which are again terms. Compound terms are ordinarily written as a functor
     // followed by a comma-separated list of argument terms, which is contained in parentheses. The number of arguments is called the term's arity. An atom can be regarded
     // as a compound term with arity zero.
+    template<class VariableRule>
     class PrologFunctor : public
     AndExpression<Args
     <
         OrExpression<Args<
-            PrologAtom
+            AndExpression<Args
+            <
+                NotPeekExpression<VariableRule>,
+                PrologAtom
+            >>
             // Special case the period string since it is used for lists i.e. .()
 //            CharacterSymbol<PeriodString>
         >>,
@@ -238,7 +259,7 @@ namespace Prolog
                 PrologOptionalWhitespace,
                 OptionalExpression
                 <
-                    PrologTermList
+                    PrologTermList<VariableRule>
                 >,
                 PrologOptionalWhitespace,
                 CharacterSymbol<RightParenthesisString>
@@ -248,26 +269,28 @@ namespace Prolog
     {
     };
 
+    template<class VariableRule = HtnVariable>
     class PrologRule : public
     AndExpression<Args
     <
-        PrologFunctor,
+        PrologFunctor<VariableRule>,
         PrologOptionalWhitespace,
         CharacterSymbol<ColonString>,
         CharacterSymbol<DashString>,
         PrologOptionalWhitespace,
         OptionalExpression
         <
-            PrologTermList
+            PrologTermList<VariableRule>
         >
     >, FlattenType::None, PrologSymbolID::PrologRule, PrologRuleError>
     {
     };
     
+    template<class VariableRule = HtnVariable>
 	class PrologQuery : public
     AndExpression<Args<
 		PrologOptionalWhitespace,
-		PrologFunctorList,
+		PrologFunctorList<VariableRule>,
 		PrologOptionalWhitespace,
 		CharacterSymbol<PeriodString>,
 		PrologOptionalWhitespace,
@@ -276,7 +299,11 @@ namespace Prolog
     {
     };
 
-    
+    // This parser defaults to requiring a ? in front of any variable
+    // and allowing capitalization anywhere.
+    // If you want normal Prolog rules, set to PrologCapitalizedVariable for
+    // the VariableRule argument
+    template<class VariableRule = HtnVariable>
     class PrologDocument : public
     AndExpression<Args<
         OneOrMoreExpression
@@ -284,8 +311,8 @@ namespace Prolog
             AndExpression<Args<
                 PrologOptionalWhitespace,
                 OrExpression<Args<
-                    PrologRule,
-                    PrologFunctor
+                    PrologRule<VariableRule>,
+                    PrologFunctor<VariableRule>
                 >>,
                 PrologOptionalWhitespace,
                 CharacterSymbol<PeriodString>,

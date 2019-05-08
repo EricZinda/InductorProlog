@@ -17,7 +17,7 @@ class HtnTermFactory;
 class HtnRuleSet;
 using namespace Prolog;
 
-class PrologQueryCompiler : public Compiler<PrologQuery>
+class PrologQueryCompiler : public Compiler<PrologQuery<>>
 {
 public:
 	PrologQueryCompiler(HtnTermFactory *termFactory) :
