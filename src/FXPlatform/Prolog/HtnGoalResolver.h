@@ -54,6 +54,7 @@ private:
     static void RuleCount(ResolveState *state);
     static void RuleDistinct(ResolveState *state);
     static void RuleFirst(ResolveState *state);
+    static void RuleForAll(ResolveState *state);
     static void RuleIs(ResolveState *state);
     static void RuleNewline(ResolveState *state);
     static void RuleNot(ResolveState *state);

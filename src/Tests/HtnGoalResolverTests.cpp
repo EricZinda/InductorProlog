@@ -595,7 +595,96 @@ SUITE(HtnGoalResolverTests)
         finalUnifier = HtnGoalResolver::ToString(unifier.get());
         CHECK_EQUAL(finalUnifier, "((), ())");
 	}
+    
+    TEST(HtnGoalResolverForAllTests)
+    {
+        HtnGoalResolver resolver;
+        shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+        shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+        shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+        string testState;
+        string goals;
+        string finalUnifier;
+        shared_ptr<vector<UnifierType>> unifier;
+        
+        //        SetTraceFilter((int)SystemTraceType::Solver, TraceDetail::Diagnostic);
 
+        std::stringstream out;
+        std::stringstream expectedOut;
+        std::streambuf *coutbuf;
+        
+        // Make sure we loop over all alternatives
+        compiler->Clear();
+        testState = string() +
+        "item(a)." +
+        "item(b)." +
+        "has(item(a)).    "
+        "has(item(b)).    "
+        "rule(?A) :- has(?A), writeln(?A)."
+        "goals( forall(item(?X), rule(item(?X))) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        
+        // Redirect cout to catch output
+        out = std::stringstream();
+        coutbuf = std::cout.rdbuf(); //save old buf
+        std::cout.rdbuf(out.rdbuf()); //redirect std::cout to out.txt!
+        
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+        expectedOut = std::stringstream();
+        expectedOut << "item(a)" << endl << "item(b)" << endl;
+        CHECK_EQUAL(out.str(), expectedOut.str());
+        std::cout.rdbuf(coutbuf); //reset to standard output again
+        
+        // Make sure we don't bind variables outside the foreach()
+        compiler->Clear();
+        testState = string() +
+        "item(a)." +
+        "item(b)." +
+        "has(item(a)).    "
+        "has(item(b)).    "
+        "rule(?A) :- has(?A), writeln(?A)."
+        "goals( forall( item(?X), rule(item(?X)) ), writeln(item(?X)) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        
+        // Redirect cout to catch output
+        out = std::stringstream();
+        coutbuf = std::cout.rdbuf(); //save old buf
+        std::cout.rdbuf(out.rdbuf()); //redirect std::cout to out.txt!
+        
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+        expectedOut = std::stringstream();
+        expectedOut << "item(a)" << endl << "item(b)" << endl << "item(?X)" << endl;
+        string temp = out.str();
+        CHECK_EQUAL(out.str(), expectedOut.str());
+        std::cout.rdbuf(coutbuf); //reset to standard output again
+        
+        
+        // Make sure we stop immediately when we fail and don't backtrack over other solutions
+        compiler->Clear();
+        testState = string() +
+        "item(a)." +
+        "item(b)." +
+        "has(item(b)).	"
+        "rule(?A) :- has(?A), writeln(?A)."
+        "goals( forall(item(?X), rule(item(?X))) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        
+        // Redirect cout to catch output
+        out = std::stringstream();
+        coutbuf = std::cout.rdbuf(); //save old buf
+        std::cout.rdbuf(out.rdbuf()); //redirect std::cout to out.txt!
+        
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "null");
+        CHECK_EQUAL(out.str(), "");
+        std::cout.rdbuf(coutbuf); //reset to standard output again
+    }
+    
     TEST(HtnGoalResolverTrueFalseTests)
     {
         HtnGoalResolver resolver;

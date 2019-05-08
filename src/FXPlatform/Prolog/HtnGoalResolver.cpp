@@ -427,6 +427,7 @@ HtnGoalResolver::HtnGoalResolver()
 	AddCustomRule("count", std::bind(&HtnGoalResolver::RuleCount, std::placeholders::_1));
     AddCustomRule("distinct", std::bind(&HtnGoalResolver::RuleDistinct, std::placeholders::_1));
     AddCustomRule("first", std::bind(&HtnGoalResolver::RuleFirst, std::placeholders::_1));
+    AddCustomRule("forall", std::bind(&HtnGoalResolver::RuleForAll, std::placeholders::_1));
     AddCustomRule("is", std::bind(&HtnGoalResolver::RuleIs, std::placeholders::_1));
     AddCustomRule("max", std::bind(&HtnGoalResolver::RuleAggregate, std::placeholders::_1));
     AddCustomRule("min", std::bind(&HtnGoalResolver::RuleAggregate, std::placeholders::_1));
@@ -1268,6 +1269,75 @@ void HtnGoalResolver::RuleDistinct(ResolveState *state)
         }
             break;
             
+        default:
+            StaticFailFastAssert(false);
+            break;
+    }
+}
+
+// forall(Condition, Action)
+// returns true if there are no failures, otherwise false
+// Written as not(Condition, not(Action), !),  i.e., There is no instantiation of Condition for which Action is false
+// will stop backtracking over all potential solutions when there is a failure
+// Resolves term1, term2, in isolation.  I.e. does not
+// let variable bindings go outside of the forall() statement
+void HtnGoalResolver::RuleForAll(ResolveState *state)
+{
+    shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
+    shared_ptr<HtnTerm> goal = currentNode->currentGoal();
+    shared_ptr<vector<UnifierType>> &solutions = state->solutions;
+    shared_ptr<vector<shared_ptr<ResolveNode>>> &resolveStack = state->resolveStack;
+    HtnTermFactory *termFactory = state->termFactory;
+
+    switch(currentNode->continuePoint)
+    {
+        case ResolveContinuePoint::CustomStart:
+        {
+            if(goal->arguments().size() != 2)
+            {
+                // Invalid program
+                Trace1("ERROR      ", "forall(term1, term2) must have exactly two terms: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+                StaticFailFastAssert(false);
+                currentNode->continuePoint = ResolveContinuePoint::ProgramError;
+            }
+            else
+            {
+                // Run the resolver just on not(Condition, not(Action)) as if it were a standalone resolution.  Then continue on depending on what happens
+                vector<shared_ptr<HtnTerm>> implementation;
+                implementation.push_back(termFactory->CreateFunctor("not", { goal->arguments()[0], termFactory->CreateFunctor("not", { goal->arguments()[1] }), termFactory->CreateConstant("!") } ));
+                currentNode->PushStandaloneResolve(state, nullptr, implementation.rbegin(), implementation.rend(), ResolveContinuePoint::CustomContinue1);
+            }
+        }
+        break;
+
+        case ResolveContinuePoint::CustomContinue1:
+        {
+            // Solutions now contains just solutions to what was in the two terms
+            if(solutions == nullptr)
+            {
+                // There were no solutions: so it is a failure!
+                // Just like if we couldn't find rules to unify with, we stop the depth first search here
+                Trace1("FAIL       ", "forall() rule failed: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, HtnTerm::ToString((*currentNode->resolvent())[0]->arguments()));
+                state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                resolveStack->pop_back();
+            }
+            else
+            {
+                // All were successful: success!
+                // Treat this node as though it unified with a rule that resolved to true.
+                // Just like if we unified with a normal rule, we continue the depth first search skipping the current goal
+                // No unifiers got added since that is the specso no changes there
+                // No new goals were added since it just resolved to "true"
+                Trace1("           ", "forall() rule succeeded: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, HtnTerm::ToString((*currentNode->resolvent())[0]->arguments()));
+                resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
+                currentNode->continuePoint = ResolveContinuePoint::Return;
+            }
+            
+            // Put back on whatever solutions we had before the forall() so we can continue adding to them
+            currentNode->PopStandaloneResolve(state);
+        }
+        break;
+
         default:
             StaticFailFastAssert(false);
             break;
