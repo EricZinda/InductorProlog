@@ -49,6 +49,7 @@ SUITE(PrologCompilerTests)
         CHECK(state->DebugHasRule("a(b)", ""));
     }
 
+    // Test using the Htn syntax for variables
     TEST(PrologQueryTests)
     {
         //                        SetTraceFilter(SystemTraceType::Parsing, TraceDetail::Diagnostic);
@@ -206,7 +207,10 @@ SUITE(PrologCompilerTests)
         
         rule = ParserDebug::TestTryParse<PrologFunctor<VariableRule>>("a(b,c)", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
-        
+
+        rule = ParserDebug::TestTryParse<PrologFunctor<VariableRule>>("a", deepestFailure, errorMessage);
+        CHECK(rule != nullptr);
+
         
         // rule
         rule = ParserDebug::TestTryParse<PrologRule<VariableRule>>("a :- ", deepestFailure, errorMessage);
@@ -303,6 +307,9 @@ SUITE(PrologCompilerTests)
         
         
         // Query
+        rule = ParserDebug::TestTryParse<PrologQuery<VariableRule>>("a.", deepestFailure, errorMessage);
+        CHECK(rule != nullptr);
+        
         rule = ParserDebug::TestTryParse<PrologQuery<VariableRule>>("a(a).", deepestFailure, errorMessage);
         CHECK(rule != nullptr);
         

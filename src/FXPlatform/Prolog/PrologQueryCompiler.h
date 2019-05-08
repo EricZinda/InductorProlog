@@ -17,20 +17,52 @@ class HtnTermFactory;
 class HtnRuleSet;
 using namespace Prolog;
 
-class PrologQueryCompiler : public Compiler<PrologQuery<>>
+// VariableRule determines if the compiler uses normal prolog rules for variables
+// or the "Htn-style" where ? must proceed a variable name.  See PrologParser.h for
+// more details
+template <class VariableRule>
+class PrologQueryCompilerBase : public Compiler<PrologQuery<VariableRule>>
 {
 public:
-	PrologQueryCompiler(HtnTermFactory *termFactory) :
+	PrologQueryCompilerBase(HtnTermFactory *termFactory) :
         m_termFactory(termFactory)
     {
     }
-	void Clear();
+    
+	void Clear()
+    {
+        Compiler<PrologQuery<VariableRule>>::Initialize();
+        m_result.clear();
+    }
 
     ValueProperty(private, HtnTermFactory *, termFactory);
     
 private:
-    virtual bool ProcessAst(shared_ptr<CompileResultType> ast);
+    virtual bool ProcessAst(shared_ptr<typename Compiler<PrologQuery<VariableRule>>::CompileResultType> result)
+    {
+        FailFastAssert(m_termFactory != nullptr);
+        // There should only ever be a single PrologQuery item if our parser is working
+        FailFastAssert(result->size() == 1 && (*result)[0]->symbolID() == PrologSymbolID::PrologQuery);
+        
+        // Top level symbol is a Query, we want to iterate its children which will be functors
+        for(auto item : (*result)[0]->children())
+        {
+            switch(item->symbolID())
+            {
+                case PrologSymbolID::PrologFunctor:
+                    m_result.push_back(PrologCompiler::CreateTermFromFunctor(m_termFactory, item));
+                    break;
+                default:
+                    FailFastAssert(false);
+            }
+        }
+        
+        return true;
+    }
+    
 	ValueProperty(private, std::vector<shared_ptr<HtnTerm>>, result);
 };
 
+typedef PrologQueryCompilerBase<PrologCapitalizedVariable> PrologStandardQueryCompiler;
+typedef PrologQueryCompilerBase<HtnVariable> PrologQueryCompiler;
 #endif /* PrologQueryCompiler_hpp */

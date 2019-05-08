@@ -35,7 +35,7 @@ int main (int argc, char *argv[])
     		fprintf(stdout, "Succesfully compiled %s\r\n\r\nType a Prolog query or hit q to end.\r\n\r\n", targetFileAndPath.c_str());
     		fprintf(stdout, "?- ");
 
-			PrologQueryCompiler queryCompiler(factory.get());
+			PrologStandardQueryCompiler queryCompiler(factory.get());
 	        HtnGoalResolver resolver;
 			string input;
 			while(true)
@@ -56,7 +56,7 @@ int main (int argc, char *argv[])
                 }
 
 				if (input == "q") break;
-//                cout << "received: " << input << endl;
+                cout << "received: " << input << endl;
 				if(queryCompiler.Compile(input))
 				{
 					shared_ptr<vector<UnifierType>> queryResult = resolver.ResolveAll(factory.get(), state.get(), queryCompiler.result());
