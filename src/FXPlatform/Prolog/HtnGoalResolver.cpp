@@ -1632,7 +1632,17 @@ void HtnGoalResolver::RuleRetract(ResolveState* state)
                 vector<shared_ptr<HtnTerm>> retractList;
                 if (term->isGround())
                 {
-                    retractList.push_back(term);
+                    if(prog->HasFact(term))
+                    {
+                        retractList.push_back(term);
+                    }
+                    else
+                    {
+                        Trace1("FAIL       ", "retract() rule failed, fact doesn't exist: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, term->ToString());
+                        state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                        resolveStack->pop_back();
+                        return;
+                    }
                 }
                 else
                 {

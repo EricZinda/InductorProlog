@@ -909,7 +909,7 @@ SUITE(HtnGoalResolverTests)
 		CHECK_EQUAL(finalUnifier, "((?After = Name2))");
 		CHECK(!state->DebugHasRule("itemsInBag(Name1)", ""));
 
-        // ***** single retract() goal with a variable that needs to be bound
+        // ***** single retractall() goal with a variable that needs to be bound
         compiler->Clear();
         testState = string() +
         "itemsInBag(Name1). \r\n" +
@@ -922,6 +922,16 @@ SUITE(HtnGoalResolverTests)
         CHECK(!state->DebugHasRule("itemsInBag(Name1)", ""));
         CHECK(!state->DebugHasRule("itemsInBag(Name2)", ""));
 
+        // ***** single retract() goal with a fact that doesn't exist
+        compiler->Clear();
+        testState = string() +
+        "itemsInBag(Name1). \r\n" +
+        "itemsInBag(Name2). \r\n" +
+        "goals( retract(itemsInBag(Name3)) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "null");
         
 		// TODO: figure out how to make this work
 		//// ***** 

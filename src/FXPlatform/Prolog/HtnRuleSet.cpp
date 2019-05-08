@@ -184,7 +184,7 @@ void HtnRuleSet::Update(HtnTermFactory *factory, const vector<shared_ptr<HtnTerm
         // Can only remove something that exists
         if(!HasFact(item))
         {
-            FailFastAssert(false);
+            FailFastAssertDesc(false, (string("Can't retract something that doesn't exist: ") + item->ToString()).c_str());
         }
         
         // Note that if we are removing a fact that was added in this instance, we will end up with
@@ -227,7 +227,7 @@ void HtnRuleSet::Update(HtnTermFactory *factory, const vector<shared_ptr<HtnTerm
         // Can only add something that doesn't exist yet
         if(HasFact(item))
         {
-            FailFastAssert(false);
+            FailFastAssertDesc(false, (string("Can't assert something that already exists: ") + item->ToString()).c_str());
         }
         
         shared_ptr<HtnRule> rule = shared_ptr<HtnRule>(new HtnRule(item, {}));

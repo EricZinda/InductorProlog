@@ -1,4 +1,5 @@
-- Implement ForAll/2
+- make retractall() not abort the process if the fact doesn't exist
+- finish implementing retract with unbound variables and enable tests
 
 - Make Adventure.pl compile properly
 	- (done) Support Block comments /* */

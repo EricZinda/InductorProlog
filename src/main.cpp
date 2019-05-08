@@ -56,7 +56,7 @@ int main (int argc, char *argv[])
                 }
 
 				if (input == "q") break;
-                cout << "received: " << input << endl;
+//                cout << "received: " << input << endl;
 				if(queryCompiler.Compile(input))
 				{
 					shared_ptr<vector<UnifierType>> queryResult = resolver.ResolveAll(factory.get(), state.get(), queryCompiler.result());
