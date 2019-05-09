@@ -1,2 +1,13 @@
-person(stevie).
-hasFishTank(stevie).
+
+move(1,X,Y,_) :-  
+    write("Move top disk from "), 
+    write(X), 
+    write(" to "), 
+    write(Y), 
+    nl. 
+move(N,X,Y,Z) :- 
+    >(N, 1), 
+    is(M, -(N, 1)), 
+    move(M,X,Z,Y), 
+    move(1,X,Y,_), 
+    move(M,Z,Y,X).  

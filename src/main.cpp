@@ -27,15 +27,27 @@ int main (int argc, char *argv[])
 	{
 	    string targetFileAndPath = string(argv[1]);
 
+		// IndProlog uses a factory model for creating terms so it can "intern" them to save memory.  You must never
+		// mix terms from different HtnTermFactorys
         shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+
+        // HtnRuleSet is where the facts and rules are stored for the program.  It is the database.
         shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+
+        // The PrologStandardCompiler will use the normal Prolog parsing rules where capitalized things are variables
+		// An alternative used by the HTN engine (see blog mentioned in readme.md for more details) is called PrologCompiler
     	PrologStandardCompiler compiler(factory.get(), state.get());
+
+    	// There are variants of CompileDocument() that take paths, streams or simply strings
     	if(compiler.CompileDocument(targetFileAndPath))
     	{
     		fprintf(stdout, "Succesfully compiled %s\r\n\r\nType a Prolog query or hit q to end.\r\n\r\n", targetFileAndPath.c_str());
     		fprintf(stdout, "?- ");
 
+			// The PrologStandardQueryCompiler will compile prolog queries using the normal Prolog parsing rules
 			PrologStandardQueryCompiler queryCompiler(factory.get());
+
+			// HtnGoalResolver is the Prolog "engine" that resolves queries
 	        HtnGoalResolver resolver;
 			string input;
 			while(true)
@@ -59,6 +71,7 @@ int main (int argc, char *argv[])
 //                cout << "received: " << input << endl;
 				if(queryCompiler.Compile(input))
 				{
+					// The resolver can give one answer at a time using ResolveNext(), or just get them all using ResolveAll()
 					shared_ptr<vector<UnifierType>> queryResult = resolver.ResolveAll(factory.get(), state.get(), queryCompiler.result());
 					if (queryResult == nullptr)
 					{
