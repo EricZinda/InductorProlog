@@ -6,6 +6,7 @@ target_sources(lib
     	NanoTrace.h
     	NanoTrace.cpp
     	ReflectionEnum.h
+    	SystemTraceType.h
     	Utilities.h
     	Utilities.cpp
 )
