@@ -1,4 +1,3 @@
-- ## comments not working at top of file for towers of hanoi from https://www.cpp.edu/~jrfisher/www/prolog_tutorial/2_3.html
 - Support syntax for x = y instead of =(x, y)
 - Support both variants of '""' and "''"
 - make retractall() not abort the process if the fact doesn't exist
