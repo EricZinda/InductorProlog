@@ -1,6 +1,8 @@
 Inductor Prolog Compiler
 ========================
-This lightweight Prolog compiler was first used in production in an iPhone strategy game called [Exospecies](https://www.exospecies.com). Visit the [Exospecies Blog](https://www.exospecies.com/blog) for more details.  It is designed to be small, memory constrained, and used as an implementation detail of an app... *not* as an interactive prolog compiler.  That means it has features like:
+This lightweight Prolog compiler was first used in production in an iPhone strategy game called [Exospecies](https://www.exospecies.com). Visit the [Exospecies Blog](https://www.exospecies.com/blog) for more details.  It was designed for use with the [Hierarchical Task Network Engine](https://github.com/EricZinda/InductorHtn) but can also be used standalone as a simple embedded Prolog compiler.
+
+It is designed to be small, memory constrained, and used as an implementation detail of an app... *not* as an interactive prolog compiler.  That means it has features like:
 
 - Small and easy to debug and extend.  I wanted something I could understand.
 - Constrained feature set (see below for a non-exhaustive list of features it *doesn't* support). I only implemented what was required to implement the Heirarchical Task Network AI algorithm (see blog above for more details)
@@ -23,7 +25,7 @@ The following features are for sure *not* in the Inductor Prolog engine (this is
 - `;` (or)
 - `->` (if)
 - syntax like `a == b` instead of `==(a, b)`
-- " inside comments.  Use "This is a quote 'inside another quote' " instead
+- `"` inside comments.  Use `"This is a quote 'inside another quote' "` instead
 - Any Metaprogramming features or rules like `call`
 	
 
@@ -49,7 +51,7 @@ indprolog is designed to be built with [CMake](https://cmake.org) like this:
 	Mac Xcode:				Open the IndProlog.xcodeproj file in the build directory using Xcode.
 	Windows Visual Studio: 	Open the .sln file in the build directory using VS.
 
-## Running Tests to make sure the build worked
+## Running Tests
 If you're using a command line generator of some sort, just run `runtests` on the commandline in your operating system of choice.
 
 
