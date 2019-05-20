@@ -65,3 +65,6 @@ else
 	fprintf(stdout, "Error compiling %s, %s\r\n", targetFileAndPath.c_str(), compiler.GetErrorString().c_str());
 }
 ~~~
+
+## Details about the Compiler and Parser
+A detailed description of how the Parser part of the Prolog Engine is available [here](https://github.com/EricZinda/InductorParser).

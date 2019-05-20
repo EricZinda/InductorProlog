@@ -64,7 +64,7 @@ Set the default project to runtests and hit F5. You'll get a console window with
 99.99% of the code for the Prolog compiler is platform agnostic (or at least should be). It has been built and tested on Windows, Mac and iOS. The platform specific code is located in the iOS and Win directorys and is currently only a single function for debug logging.
 
 - /FXPlatform: 			Contains some general purpose code for tracing, asserts, strings, etc
-- /FXPlatform/Parser: 	The Inductor Parser code
+- /FXPlatform/Parser: 	The Inductor Parser code. A detailed description of how the Parser works is available [here](https://github.com/EricZinda/InductorParser)
 - /FXPlatform/iOS: 		Code specific to iOS and Mac
 - /FXPlatform/Win: 		Code specific to Windows
 - /FXPlatform/Prolog: 	The prolog compiler and runtime engine
