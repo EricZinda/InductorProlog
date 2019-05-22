@@ -1,6 +1,6 @@
 Inductor Prolog Compiler
 ========================
-This lightweight Prolog compiler was first used in production in an iPhone strategy game called [Exospecies](https://www.exospecies.com). Visit the [Exospecies Blog](https://www.exospecies.com/blog) for more details.  It was designed for use with the [Hierarchical Task Network Engine](https://github.com/EricZinda/InductorHtn) but can also be used standalone as a simple embedded Prolog compiler.
+This lightweight Prolog compiler was first used in production in an iPhone strategy game called [Exospecies](https://www.exospecies.com). Visit the [Exospecies Blog](https://www.exospecies.com/blog) for more details.  It was designed for use with the [Hierarchical Task Network Engine](https://github.com/EricZinda/InductorHtn) but can also be used standalone as a simple embedded Prolog compiler. 
 
 It is designed to be small, memory constrained, and used as an implementation detail of an app... *not* as an interactive prolog compiler.  That means it has features like:
 

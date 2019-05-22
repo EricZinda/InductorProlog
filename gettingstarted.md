@@ -3,6 +3,9 @@ Getting Started
 ===============
 Read readme.md for background on the engine and how to build it. This document describes how to use it if you think it is right for you. Also note that a simple overview of Prolog and how Prolog SLD Resolution works is available on the [Exospecies Blog](https://www.exospecies.com/blog/prolog).
 
+## Performance
+Note that the performance of this project is *HUGELY* dependent on whether you have built for retail or debug.  Debug builds have error checking which does *major* damage to performance.  Make sure you run in retail if you are evaluating the performance!
+
 ## Interactive Mode
 Even though IndProlog is not designed to run interactively, it will do it, and this can allow you to play around and see what features it supports.
 
