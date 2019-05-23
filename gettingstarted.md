@@ -1,7 +1,6 @@
-
 Getting Started
 ===============
-Read readme.md for background on the engine and how to build it. This document describes how to use it if you think it is right for you. Also note that a simple overview of Prolog and how Prolog SLD Resolution works is available on the [Exospecies Blog](https://www.exospecies.com/blog/prolog).
+Read readme.md for background on the engine and how to build it. This document describes how to use it if you think it is right for you. Also note that a simple overview of Prolog and how Prolog SLD Resolution works is available on the [Exospecies Blog](https://blog.inductorsoftware.com/blog/prolog).
 
 ## Performance
 Note that the performance of this project is *HUGELY* dependent on whether you have built for retail or debug.  Debug builds have error checking which does *major* damage to performance.  Make sure you run in retail if you are evaluating the performance!
@@ -159,7 +158,7 @@ The Prolog language allows you to `assert()` and `retract()` rules to change the
 Just like HtnTermFactory, call `HtnRuleSet::dynamicSize()` to get the unique memory usage used by the rules (but not the terms they contain, that is done by calling HtnTermFactory).
 
 ### HtnGoalResolver
-This is the Prolog Engine that does the bulk of the work. The main functions you will use are `HtnGoalResolver::ResolveNext()` and `HtnGoalResolver::ResolveAll()` which solve Prolog queries. A simple overview of Prolog and how Prolog SLD Resolution works is available on the [Exospecies Blog](https://www.exospecies.com/blog/prolog).
+This is the Prolog Engine that does the bulk of the work. The main functions you will use are `HtnGoalResolver::ResolveNext()` and `HtnGoalResolver::ResolveAll()` which solve Prolog queries. A simple overview of Prolog and how Prolog SLD Resolution works is available on the [Exospecies Blog](https://blog.inductorsoftware.com/blog/prolog).
 
 There are a bunch of static helper functions that can come in handy on this class as well. Most useful is the `HtnGoalResolver::Unify()` function that will do unification between two terms.
 
