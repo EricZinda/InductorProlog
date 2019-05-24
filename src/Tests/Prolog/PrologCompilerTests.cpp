@@ -15,7 +15,7 @@
 #include "FXPlatform/Prolog/PrologParser.h"
 #include "FXPlatform/Prolog/PrologCompiler.h"
 #include "Logger.h"
-#include "ParserTestBase.h"
+#include "Tests/ParserTestBase.h"
 #include <thread>
 #include "UnitTest++/UnitTest++.h"
 using namespace Prolog;

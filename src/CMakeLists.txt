@@ -36,6 +36,7 @@ endif()
 
 add_subdirectory(UnitTest++)
 add_subdirectory(Tests)
+add_subdirectory(Tests/Prolog)
 
 if(WIN32)
 	add_subdirectory(UnitTest++/Win32)

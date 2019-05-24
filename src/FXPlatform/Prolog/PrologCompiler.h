@@ -30,7 +30,7 @@ public:
     {
     }
 
-    void Clear()
+    virtual void Clear()
     {
         m_goals.clear();
         m_state->ClearAll();
@@ -38,7 +38,7 @@ public:
     
     // Helper that creates a new ruleset and sets it instead of just clearing it.
     // Useful if the RuleSet has been locked
-    void ClearWithNewRuleSet()
+    virtual void ClearWithNewRuleSet()
     {
         m_goals.clear();
         m_compilerOwnedRuleSet = shared_ptr<HtnRuleSet>(new HtnRuleSet());
@@ -105,11 +105,11 @@ public:
     
     vector<shared_ptr<HtnTerm>> &goals() { return m_goals; }
 
-    ValueProperty(private, shared_ptr<HtnRuleSet>, compilerOwnedRuleSet);
-    ValueProperty(private, HtnRuleSet *, state);
-    ValueProperty(private, HtnTermFactory *, termFactory);
+    ValueProperty(protected, shared_ptr<HtnRuleSet>, compilerOwnedRuleSet);
+    ValueProperty(protected, HtnRuleSet *, state);
+    ValueProperty(protected, HtnTermFactory *, termFactory);
     
-private:
+protected:
     vector<shared_ptr<HtnTerm>> m_goals;
     void ParseAtom(shared_ptr<Symbol> symbol)
     {
@@ -117,7 +117,7 @@ private:
         m_state->AddRule(m_termFactory->CreateConstant(symbol->ToString()), emptyTail);
     }
     
-    void ParseRule(shared_ptr<Symbol> symbol)
+    virtual void ParseRule(shared_ptr<Symbol> symbol)
     {
         shared_ptr<Symbol> head = Compiler<PrologDocument<VariableRule>>::GetChild(symbol, 0, -1);
         

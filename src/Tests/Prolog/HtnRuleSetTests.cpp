@@ -12,7 +12,7 @@
 #include "FXPlatform/Prolog/HtnTermFactory.h"
 #include "FXPlatform/Prolog/PrologParser.h"
 #include "FXPlatform/Prolog/PrologCompiler.h"
-#include "ParserTestBase.h"
+#include "Tests/ParserTestBase.h"
 #include "Logger.h"
 #include <thread>
 #include "UnitTest++/UnitTest++.h"
