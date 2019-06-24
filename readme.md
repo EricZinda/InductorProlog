@@ -19,9 +19,8 @@ The Inductor Prolog engine supports only what was required to ship the [Exospeci
 
 The following features are for sure *not* in the Inductor Prolog engine (this is not an exhaustive list):
 - support for lists
-- Only facts can be asserted or retracted
-- Can't declare a function as dynamic like `dynamic(myRule/1)`
-	- Anything can be changed in IndProlog, this declaration is not necessary
+- asserting or retracting anything besides a fact
+- declaring a function as dynamic like `dynamic(myRule/1)`: Anything can be changed in IndProlog, this declaration is not necessary
 - `;` (or)
 - `->` (if)
 - syntax like `a == b` instead of `==(a, b)`
