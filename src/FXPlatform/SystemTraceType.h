@@ -11,5 +11,6 @@
     item(SystemTraceType, HTML, (uint64_t)SystemTraceType::Custom * 8) \
     item(SystemTraceType, Solver, (uint64_t)SystemTraceType::Custom * 4096) \
     item(SystemTraceType, Unifier, (uint64_t)SystemTraceType::Custom * 8192) \
+    item(SystemTraceType, Planner, (uint64_t)SystemTraceType::Custom * 16384) \
     item(SystemTraceType, All, 0x0FFFFFFF)
 DECLARE_ENUM(SystemTraceType,SYSTEM_TRACE_TYPE)
