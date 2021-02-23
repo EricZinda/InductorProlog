@@ -2,6 +2,8 @@ Inductor Prolog Compiler
 ========================
 This lightweight Prolog compiler was first used in production in an iPhone strategy game called [Exospecies](https://www.exospecies.com). Visit the [Exospecies Blog](https://blog.inductorsoftware.com/blog/) for more details.  It was designed for use with the [Hierarchical Task Network Engine](https://github.com/EricZinda/InductorHtn) but can also be used standalone as a simple embedded Prolog compiler. 
 
+It has a C++ and command line interface, and the [Hierarchical Task Network Engine](https://github.com/EricZinda/InductorHtn) includes this entire project and adds a Python interface as well.
+
 It is designed to be small, memory constrained, and used as an implementation detail of an app... *not* as an interactive prolog compiler.  That means it has features like:
 
 - Small and easy to debug and extend.  I wanted something I could understand.
@@ -18,7 +20,6 @@ Use and enjoy!
 The Inductor Prolog engine supports only what was required to ship the [Exospecies](www.exospecies.com) game and AI so it is not exhaustive or standards conforming. However, it does have the minimum set of features to write a very robust game AI, so it has most of the base features you'd expect from a Prolog compiler.
 
 The following features are for sure *not* in the Inductor Prolog engine (this is not an exhaustive list):
-- support for lists
 - asserting or retracting anything besides a fact
 - declaring a function as dynamic like `dynamic(myRule/1)`: Anything can be changed in IndProlog, this declaration is not necessary
 - `;` (or)
@@ -32,23 +33,27 @@ The following features are for sure *not* in the Inductor Prolog engine (this is
 indprolog is designed to be built with [CMake](https://cmake.org) like this:
 
 1. [Install CMake on your machine](https://cmake.org/install/)
+	- Ubuntu: apt-get install cmake
 2. Go to the root of the indprolog repository and create a build directory. 
-	unix: `mkdir build`
-	win: `md build`
+	- unix: `mkdir build`
+	- win: `md build`
 3. Change to that directory.
-	unix and win: `cd build`
+	- unix and win: `cd build`
 4. CMake can build different types of projects using "generators".  Run `cmake -help` to get a list of generators on your system:
-	unix and win: `cmake -help`
-4. Pick the generator that will create the type of project you want and use the `-G` option to choose it. Here are the ones that have been tested:
-	Mac make file: 			`cmake -G "Unix Makefiles" ../src`
-	Mac Xcode:	 			`cmake -G "Xcode" ../src`
-	Windows Visual Studio: 	`cmake -G "Visual Studio 16 2019" ../src`
-5. Then actually do the build using this command which magically builds whatever you choose on the command line: 
-	`cmake --build ./`
-5a. OR you can manually use the build system that got created by cmake:
-	unix or mac make file: 	`make`
-	Mac Xcode:				Open the IndProlog.xcodeproj file in the build directory using Xcode.
-	Windows Visual Studio: 	Open the .sln file in the build directory using VS.
+	- unix and win: `cmake -help`
+5. Pick the generator that will create the type of project you want and use the `-G` option to choose it. Here are the ones that have been tested:
+	- Ubuntu make file:			`cmake -G "Unix Makefiles" ../src` 
+	- Mac make file: 			`cmake -G "Unix Makefiles" ../src`
+	- Mac Xcode:	 			`cmake -G "Xcode" ../src`
+	- Windows Visual Studio: 	`cmake -G "Visual Studio 16 2019" ../src`
+6. Then actually do the build using this command which magically builds whatever you choose on the command line: 
+	- `cmake --build ./ --config Release`
+	- or
+	- `cmake --build ./ --config Debug`
+7. OR you can manually use the build system that got created by cmake:
+	- unix or mac make file: 	`make`
+	- Mac Xcode:				Open the IndProlog.xcodeproj file in the build directory using Xcode.
+	- Windows Visual Studio: 	Open the .sln file in the build directory using VS.
 
 ## Running Tests
 If you're using a command line generator of some sort, just run change to the directory where things got built and execute `runtests` on the commandline in your operating system of choice.
@@ -68,6 +73,7 @@ Set the default project to runtests and hit F5. You'll get a console window with
 - /FXPlatform/Parser: 	The Inductor Parser code. A detailed description of how the Parser works is available [here](https://github.com/EricZinda/InductorParser)
 - /FXPlatform/iOS: 		Code specific to iOS and Mac
 - /FXPlatform/Win: 		Code specific to Windows
+- /FXPlatform/Posix: 	Code specific to Linux variants
 - /FXPlatform/Prolog: 	The Prolog compiler and runtime engine
 
 - /UnitTest++:			The [UnitTest++](https://github.com/unittest-cpp/unittest-cpp) framework used to write unit tests 

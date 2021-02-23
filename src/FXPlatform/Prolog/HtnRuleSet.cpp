@@ -14,8 +14,8 @@ using namespace std;
 
 void HtnRuleSet::HtnSharedRules::AddRule(shared_ptr<HtnTerm> head, vector<shared_ptr<HtnTerm>> tail)
 {
-    FailFastAssert(!m_isLocked);
-    FailFastAssert(head->name().size() > 0);
+    FailFastAssertDesc(!m_isLocked, "Internal Error");
+    FailFastAssertDesc(head->name().size() > 0, "term name must have at least one character");
     HtnTerm::HtnTermID headID = head->GetUniqueID();
     
     // Ground facts must be unique
@@ -33,10 +33,9 @@ void HtnRuleSet::HtnSharedRules::AddRule(shared_ptr<HtnTerm> head, vector<shared
                     TraceString1("HtnRuleSet::HtnSharedRules::AddRule duplicate rule '{0}'",
                                  SystemTraceType::Solver, TraceDetail::Normal,
                                  item.head()->ToString());
+                    FailFastAssertDesc(false, ("Duplicate Rule added: " + item.head()->ToString()).c_str());
                 }
-            }
-            
-            FailFastAssert(false);
+            }            
         }
     }
 
@@ -56,7 +55,7 @@ void HtnRuleSet::HtnSharedRules::AddRule(shared_ptr<HtnTerm> head, vector<shared
 
 void HtnRuleSet::HtnSharedRules::ClearAll()
 {
-    FailFastAssert(!m_isLocked);
+    FailFastAssertDesc(!m_isLocked, "Internal Error");
     m_rules.clear();
     m_ruleHeads.clear();
     m_ruleIndex.clear();
@@ -73,9 +72,99 @@ bool HtnRuleSet::HtnSharedRules::HasFact(shared_ptr<HtnTerm> term) const
 void HtnRuleSet::AddRule(shared_ptr<HtnTerm> head, vector<shared_ptr<HtnTerm>> tail)
 {
     // Should not be updating facts at this point
-    FailFastAssert(m_factsDiff.size() == 0);
+    FailFastAssertDesc(m_factsDiff.size() == 0, "Internal Error");
     m_sharedRules->AddRule(head, tail);
 }
+
+// This is a quick test to get rid of obvious failures without having to do more work
+// it is just to improve performance
+//
+// For a given argument on a term we have these cases that *might* work (if the terms are equivalent)
+// Variable / Anything -> A variable can unify with anything
+// Constant / Constant -> If they are equal
+// Constant / Variable
+// Compound / Compound -> If they are equivalent
+bool HtnRuleSet::CanPotentiallyUnify(const HtnTerm *term, const HtnTerm *ruleHead) const
+{
+    if(term->isEquivalentCompoundTerm(ruleHead) || (term->isConstant() && ruleHead->isConstant()))
+    {
+        for(int index = 0; index < term->arguments().size(); ++index)
+        {
+            HtnTerm *termArg = term->arguments()[index].get();
+            HtnTerm *ruleHeadArg = ruleHead->arguments()[index].get();
+            if (termArg->isVariable())
+            {
+                // Yes, keep checking
+            }
+            else if(termArg->isConstant())
+            {
+                // This arg is a constant
+                if(ruleHeadArg->isConstant())
+                {
+                    // Constant / Constant
+                    // So is the head. Are they the same constant?
+                    
+                    if(!(termArg->nameEqualTo(*ruleHeadArg)))
+                    {
+                        
+                        // Any arguments that are both constants and not == could
+                        // never be unified
+                        return false;
+                    }
+                    else
+                    {
+                        // Yes, keep checking
+                    }
+                }
+                else
+                {
+                    // term arg is constant, head arg is not, can only unify if head arg
+                    // is a variable
+                    if(!ruleHeadArg->isVariable())
+                    {
+                        return false;
+                    }
+                    else
+                    {
+                        // Constant / Variable
+                        // This arg will unify, keep checking
+                    }
+                }
+            }
+
+            else if(termArg->isCompoundTerm())
+            {
+                // Term arg is compound
+                if(ruleHeadArg->isConstant())
+                {
+                    // Can't unify a compound with a constant
+                    return false;
+                }
+                else if(ruleHeadArg->isCompoundTerm())
+                {
+                    // Compound / Compound
+                    // Might work, if they are equivalent
+                    if(!termArg->isEquivalentCompoundTerm(ruleHeadArg))
+                    {
+                        return false;
+                    }
+                }
+            }
+            else
+            {
+                // Should always be a variable, compound or constant
+                FailFastAssert(false);
+            }
+        }
+        
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
 
 void HtnRuleSet::ClearAll()
 {
@@ -145,7 +234,7 @@ bool HtnRuleSet::HasEquivalentRule(std::shared_ptr<HtnTerm> term) const
     bool found = false;
     AllRules([&](const HtnRule &rule)
       {
-          if(rule.head()->isEquivalentCompoundTerm(term))
+          if(rule.head()->isEquivalentCompoundTerm(term.get()))
           {
               found = true;
               return false;
@@ -214,7 +303,7 @@ void HtnRuleSet::Update(HtnTermFactory *factory, const vector<shared_ptr<HtnTerm
     for(auto item : factsToRemove)
     {
         // All removals must be ground
-        FailFastAssert(item->isGround());
+        FailFastAssertDesc(item->isGround(), ("Items to be removed must be ground: " + item->ToString()).c_str());
 
         // Can only remove something that exists
         if(!HasFact(item))
@@ -249,7 +338,7 @@ void HtnRuleSet::Update(HtnTermFactory *factory, const vector<shared_ptr<HtnTerm
         if(diffOrderToRemove != -1)
         {
             size_t erasedCount = m_factAdditions.erase(diffOrderToRemove);
-            FailFastAssert(erasedCount == 1);
+            FailFastAssertDesc(erasedCount == 1, "Internal Error");
         }
     }
 
@@ -257,7 +346,7 @@ void HtnRuleSet::Update(HtnTermFactory *factory, const vector<shared_ptr<HtnTerm
     for(auto item : factsToAdd)
     {
         // All additions must be ground
-        FailFastAssert(item->isGround());
+        FailFastAssertDesc(item->isGround(), ("All additions must be ground: " + item->ToString()).c_str());
 
         // Can only add something that doesn't exist yet
         if(HasFact(item))

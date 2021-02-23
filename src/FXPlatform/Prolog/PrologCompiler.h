@@ -56,9 +56,9 @@ public:
         return resolver.ResolveAll(m_termFactory, m_state, m_goals);
     }
 
-    shared_ptr<vector<UnifierType>> SolveGoals(HtnGoalResolver *resolver, int memoryBudget = 1000000)
+    shared_ptr<vector<UnifierType>> SolveGoals(HtnGoalResolver *resolver, int memoryBudget = 1000000, int64_t *highestMemoryUsedReturn = nullptr, int *furthestFailureIndex = nullptr, std::vector<std::shared_ptr<HtnTerm>> *farthestFailureContext = nullptr)
     {
-        return resolver->ResolveAll(m_termFactory, m_state, m_goals, 0, memoryBudget);
+        return resolver->ResolveAll(m_termFactory, m_state, m_goals, 0, memoryBudget, highestMemoryUsedReturn, furthestFailureIndex, farthestFailureContext);
     }
 
     static shared_ptr<HtnTerm> CreateTermFromFunctor(HtnTermFactory *factory, shared_ptr<Symbol> functor)
@@ -79,6 +79,9 @@ public:
     {
         switch(symbol->symbolID())
         {
+            case PrologSymbolID::PrologList:
+                return CreateTermFromList(factory, symbol);
+                break;
             case PrologSymbolID::PrologFunctor:
                 return CreateTermFromFunctor(factory, symbol);
                 break;
@@ -91,6 +94,34 @@ public:
             default:
                 StaticFailFastAssert(false);
                 return nullptr;
+        }
+    }
+    
+    static shared_ptr<HtnTerm> CreateTermFromList(HtnTermFactory *factory, shared_ptr<Symbol> prologList)
+    {
+        shared_ptr<Symbol> name = Compiler<PrologDocument<VariableRule>>::GetChild(prologList, 0, PrologSymbolID::PrologEmptyList);
+        if(name != nullptr)
+        {
+            return factory->EmptyList();
+        }
+        else
+        {
+            // Create a single functor like this: .(firstTerm, .(secondTerm, []))
+            shared_ptr<HtnTerm> lastTerm = factory->EmptyList();
+            for(int argIndex = (int) prologList->children().size() - 1; argIndex >= 0; argIndex--)
+            {
+                shared_ptr<Symbol> term = Compiler<PrologDocument<VariableRule>>::GetChild(prologList, argIndex, -1);
+                if(term->symbolID() == PrologSymbolID::PrologTailTerm)
+                {
+                    lastTerm = CreateTermFromItem(factory, Compiler<PrologDocument<VariableRule>>::GetChild(term, 0, -1));
+                }
+                else
+                {
+                    lastTerm = factory->CreateFunctor(".", { CreateTermFromItem(factory, term), lastTerm });
+                }
+            }
+            
+            return lastTerm;
         }
     }
     
@@ -112,7 +143,7 @@ public:
                           {
                               string idName = rule.head()->name() + "/" + lexical_cast<string>(rule.head()->arity());
                               stack.push_back(idName);
-                              CheckRuleRecurseTail(resolver, rule.head()->name(), rule.head()->arguments().size(), rule.tail(), stack, loops);
+                              CheckRuleRecurseTail(resolver, rule.head()->name(), (int) rule.head()->arguments().size(), rule.tail(), stack, loops);
                               stack.pop_back();
                               return true;
                           });
@@ -133,7 +164,7 @@ protected:
     {
         // Get the metadata if this resolves to a custom rule so we know where to recurse
         HtnGoalResolver::CustomRuleType metadata;
-        bool isCustom = resolver->GetCustomRule(ruleHead, ruleTail.size(), metadata);
+        bool isCustom = resolver->GetCustomRule(ruleHead, (int) ruleTail.size(), metadata);
         
         // Grab each term in the tail
         int termIndex = -1;
@@ -147,7 +178,7 @@ protected:
                 {
                     // Need to recurse on the terms inside of this term and treat it like a transparent rule
                     // i.e. don't put it on the stack
-                    CheckRuleRecurseTail(resolver, term->name(), term->arguments().size(), term->arguments(), stack, loops);
+                    CheckRuleRecurseTail(resolver, term->name(), (int) term->arguments().size(), term->arguments(), stack, loops);
                     continue;
                 }
                 else if(argType != CustomRuleArgType::ResolvedTerm)
@@ -192,7 +223,7 @@ protected:
                     m_state->AllRules([&](const HtnRule &potentialRule)
                      {
                          shared_ptr<HtnTerm> foundHead = potentialRule.head();
-                         if(foundHead->isEquivalentCompoundTerm(term))
+                         if(foundHead->isEquivalentCompoundTerm(term.get()))
                          {
                              foundRule = true;
                              return CheckRuleForLoopStackCheck(resolver, foundHead->name(), foundHead->arity(), potentialRule.tail(), stack, loops, false);
@@ -271,6 +302,12 @@ protected:
         m_state->AddRule(m_termFactory->CreateConstant(symbol->ToString()), emptyTail);
     }
     
+    void ParseList(shared_ptr<Symbol> symbol)
+    {
+        vector<shared_ptr<HtnTerm>> emptyTail;
+        m_state->AddRule(CreateTermFromList(m_termFactory, symbol), emptyTail);
+    }
+
     virtual void ParseRule(shared_ptr<Symbol> symbol)
     {
         shared_ptr<Symbol> head = Compiler<PrologDocument<VariableRule>>::GetChild(symbol, 0, -1);
@@ -321,6 +358,9 @@ protected:
                     break;
                 case PrologSymbolID::PrologFunctor:
                     ParseTopLevelFunctor(item);
+                    break;
+                case PrologSymbolID::PrologList:
+                    ParseList(item);
                     break;
                 case PrologSymbolID::PrologRule:
                     ParseRule(item);

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.14)
+cmake_minimum_required(VERSION 3.0.0)
 
 project(IndProlog CXX)
 set(CMAKE_CXX_STANDARD 11)
@@ -25,12 +25,15 @@ if(WIN32)
 	target_link_libraries(indprolog lib Kernel32.lib)
 	target_link_libraries(runtests lib testLib Kernel32.lib)
 	add_subdirectory(FXPlatform/Win)
-else()
+elseif (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 	target_link_libraries(indprolog lib "-framework Foundation")
 	target_link_libraries(runtests testLib lib "-framework Foundation")
 	add_subdirectory(FXPlatform/iOS)
+else()
+    target_link_libraries(indprolog lib)
+	target_link_libraries(runtests testLib lib)
+    add_subdirectory(FXPlatform/Posix)
 endif()
-
 
 #### Tests
 

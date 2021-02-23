@@ -2,8 +2,8 @@
 #include <stdexcept>
 #include <sstream>
 
+double HighPerformanceGetTimeInSeconds();
 int ReplaceAll(std::string& str, const std::string& from, const std::string& to);
-
 
 // lexical_cast<type>(value) converts value into type if possible
 template<typename Target, typename Source>

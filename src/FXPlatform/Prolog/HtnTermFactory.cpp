@@ -15,7 +15,8 @@ HtnTermFactory::HtnTermFactory() :
     m_otherAllocations(MaxIndexTerms * sizeof(string *)),
     m_outOfMemory(false),
     m_stringAllocations(0),
-    m_termsCreated(0)
+    m_termsCreated(0),
+    m_uniquifier(0)
 {
     m_uniqueIDBufferEnd = m_uniqueIDBuffer + MaxIndexTerms;
 }
@@ -55,6 +56,17 @@ shared_ptr<HtnTerm> HtnTermFactory::CreateFunctor(const string &name, vector<sha
     return GetInternedTerm(term);
 }
 
+std::shared_ptr<HtnTerm> HtnTermFactory::CreateList(std::vector<std::shared_ptr<HtnTerm>> arguments)
+{
+    shared_ptr<HtnTerm> lastTerm = EmptyList();
+    for(int index = (int)arguments.size() - 1; index >= 0; index--)
+    {
+        lastTerm = CreateFunctor(".", { arguments[index], lastTerm });
+    }
+    
+    return lastTerm;
+}
+
 shared_ptr<HtnTerm> HtnTermFactory::CreateVariable(const string &name)
 {
     m_termsCreated++;
@@ -82,6 +94,16 @@ void HtnTermFactory::DebugDumpAllocations()
     {
         if(++count > 1000) break;
     }
+}
+
+shared_ptr<HtnTerm> HtnTermFactory::EmptyList()
+{
+    if(m_emptyList == nullptr)
+    {
+        m_emptyList = CreateConstant("[]");
+    }
+    
+    return m_emptyList;
 }
 
 pair<int,int> HtnTermFactory::EndTracking(const string &key)

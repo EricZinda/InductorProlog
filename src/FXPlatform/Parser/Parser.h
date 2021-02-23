@@ -1,10 +1,12 @@
 #pragma once
+#include <cstring>
 #include "FXPlatform/FailFast.h"
 #include "FXPlatform/NanoTrace.h"
 #include <list>
 #include "LexerReader.h"
 #include <vector>
 #include <algorithm>
+#include <limits.h>
 
 //
 /*
@@ -73,6 +75,7 @@ Each of the rule templates have some standard arguments that can be tweaked when
     extern char MathString[];
     extern char NullString[];
     extern char Numbers[];
+    extern char PipeString[];
     extern char PlusString[];
     extern char PercentString[];
     extern char PeriodString[];

@@ -5,16 +5,14 @@
 //  Created by Eric Zinda on 5/19/15.
 //  Copyright (c) 2015 Eric Zinda. All rights reserved.
 //
-
 #include "Logger.h"
-#include "Windows.h"
+#include <memory>
+#include <iostream>
 
-// Implementation of debug output on windows
 void DebugLogMessage(int traceType, const TraceDetail levelOfDetail, const char *message)
 {
-	OutputDebugString(message);
+	std::cout << message;
 }
-
 
 void DebugLogMessagesToFile(const std::string &filename)
 {

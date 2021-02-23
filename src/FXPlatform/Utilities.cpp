@@ -1,5 +1,12 @@
+#include "Stopwatch.h"
 #include "Utilities.h"
 using namespace std;
+
+double HighPerformanceGetTimeInSeconds()
+{
+    StopWatch timer;
+    return timer.getCurrentTime();
+}
 
 int ReplaceAll(std::string& str, const std::string& from, const std::string& to)
 {

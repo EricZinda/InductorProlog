@@ -13,9 +13,12 @@
 #include "HtnRuleSet.h"
 #include "HtnTerm.h"
 #include "HtnTermFactory.h"
+#include <cctype>
+#include <cwctype>
 #include <stack>
-
+#include <locale> 
 const int indentSpaces = 11;
+const string initialVariablePrefix = "orig*";
 
 #define Trace0(status, trace, indent, fullTrace) \
 TraceString("HtnGoalResolver::Resolve " + string((indent) * indentSpaces, ' ') + status + trace, \
@@ -50,6 +53,16 @@ arg1, arg2, arg3, arg4, arg5);
 TraceString6("HtnGoalResolver::Resolve " + string((indent) * indentSpaces, ' ') + status + trace, \
 SystemTraceType::Solver, (fullTrace ? TraceDetail::Normal :TraceDetail::Diagnostic), \
 arg1, arg2, arg3, arg4, arg5, arg6);
+
+#define Trace7(status, trace, indent, fullTrace, arg1, arg2, arg3, arg4, arg5, arg6, arg7) \
+TraceString7("HtnGoalResolver::Resolve " + string((indent) * indentSpaces, ' ') + status + trace, \
+SystemTraceType::Solver, (fullTrace ? TraceDetail::Normal :TraceDetail::Diagnostic), \
+arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+
+#define Trace8(status, trace, indent, fullTrace, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) \
+TraceString8("HtnGoalResolver::Resolve " + string((indent) * indentSpaces, ' ') + status + trace, \
+SystemTraceType::Solver, (fullTrace ? TraceDetail::Normal :TraceDetail::Diagnostic), \
+arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 
 ResolveNode::ResolveNode(shared_ptr<vector<shared_ptr<HtnTerm>>> resolventArg, shared_ptr<UnifierType> unifierArg) :
     continuePoint(ResolveContinuePoint::NextGoal),
@@ -166,10 +179,11 @@ shared_ptr<ResolveNode> ResolveNode::CreateChildNode(HtnTermFactory *termFactory
     }
     
     shared_ptr<ResolveNode> newNode = shared_ptr<ResolveNode>(new ResolveNode(childResolvent, simplifiedUnifier));
+    newNode->currentFailureContext = currentFailureContext;
     newNode->originalGoalCount = originalGoalsLeft;
     newNode->isStandaloneResolve = isStandaloneResolve;
     newNode->variablesToKeep = variablesToKeep;
-    
+
     return newNode;
 }
 
@@ -286,13 +300,28 @@ void ResolveNode::PushStandaloneResolve(ResolveState *state, shared_ptr<TermSetT
     continuePoint = continuePointArg;
 }
 
+vector<shared_ptr<HtnTerm>> ResolveState::ReplaceInitialVariables(HtnTermFactory *termFactory, const vector<shared_ptr<HtnTerm>> &initialGoals)
+{
+    vector<shared_ptr<HtnTerm>> replacedGoals;
+    int dontCareCount = 0;
+    std::map<std::string, std::shared_ptr<HtnTerm>> variableMap;
+    for(auto item : initialGoals)
+    {
+        shared_ptr<HtnTerm> current = item->MakeVariablesUnique(termFactory, false, initialVariablePrefix, &dontCareCount, variableMap);
+        replacedGoals.push_back(current);
+    }
+    
+    return replacedGoals;
+}
+
 ResolveState::ResolveState(HtnTermFactory *termFactoryArg, HtnRuleSet *progArg, const vector<shared_ptr<HtnTerm>> &initialResolventArg, int initialIndentArg, int memoryBudgetArg) :
     collectAllSolutions(false),
     deepestFailure(-1),
     deepestFailureOriginalGoalIndex(-1),
+    farthestFailureDepth(-1),
+    farthestFailureOriginalGoalIndex(-1),
     fullTrace(false),
     highestMemoryUsed(0),
-    initialGoals(shared_ptr<vector<shared_ptr<HtnTerm>>>(new vector<shared_ptr<HtnTerm>>(initialResolventArg))),
     initialIndent(initialIndentArg),
     memoryBudget(memoryBudgetArg),
     prog(progArg),
@@ -303,9 +332,15 @@ ResolveState::ResolveState(HtnTermFactory *termFactoryArg, HtnRuleSet *progArg, 
     termMemoryUsed(0),
     uniquifier(0)
 {
+    // Replace the variable names used in the initial goals with guaranteed unique ones since we do a unification with rules *before*
+    // renaming them and this avoids improper matching
+    // Also, any "_" variables need to be replaced by unique names so they don't get treated as the same variable (called "_") when we resolve.
+    initialGoals = shared_ptr<vector<shared_ptr<HtnTerm>>>(new vector<shared_ptr<HtnTerm>>(ReplaceInitialVariables(termFactoryArg, initialResolventArg)));
+
     // Start with the initial node on the stack
 	shared_ptr<vector<shared_ptr<HtnTerm>>> resolvent = shared_ptr<vector<shared_ptr<HtnTerm>>>(new vector<shared_ptr<HtnTerm>>());
-	ResolveNode::AddNewGoalsToResolvent(termFactory, initialResolventArg.rbegin(), initialResolventArg.rend(), resolvent, &uniquifier);
+    
+	ResolveNode::AddNewGoalsToResolvent(termFactory, initialGoals->rbegin(), initialGoals->rend(), resolvent, &uniquifier);
     resolveStack->push_back(ResolveNode::CreateInitialNode(*resolvent, {}));
 }
 
@@ -331,20 +366,33 @@ string ResolveState::GetStackString()
     return stackString.str();
 }
 
-void ResolveState::RecordFailure(shared_ptr<HtnTerm> goal, int goalsLeftToProcess)
+void ResolveState::RecordFailure(shared_ptr<HtnTerm> goal, shared_ptr<ResolveNode> currentNode)
 {
-    // If we are a pushed resolver...
-    
     // Which original goal is failing? It is the one *before* the goalsLeftToProcess
+    int goalsLeftToProcess = currentNode->CountOfGoalsLeftToProcess();
     FailFastAssert(goalsLeftToProcess >= 0 && goalsLeftToProcess < initialGoals->size());
     int originalGoalIndex = (int) initialGoals->size() - goalsLeftToProcess - 1;
     FailFastAssert(originalGoalIndex >= 0 && originalGoalIndex < initialGoals->size());
     
     shared_ptr<HtnTerm> originalGoalInProgress = (*initialGoals)[originalGoalIndex];
-    int size = (int) resolveStack->size();
-    if((originalGoalIndex != deepestFailureOriginalGoalIndex) || ((size >= deepestFailure) && (goal != nullptr)))
+    int stackDepth = (int) resolveStack->size();
+    
+    // Replace the failure context if we've gotten to a new original goal OR
+    // If we've gotten farther along in the current original goal since that will be a better error
+    if( (originalGoalIndex > farthestFailureOriginalGoalIndex) ||
+        ((originalGoalIndex == farthestFailureOriginalGoalIndex) &&
+         ((farthestFailureContext.size() == 0) || // We haven't set a context yet
+          (stackDepth > farthestFailureDepth)))) // We've set one but this is deeper
     {
-        deepestFailure = size;
+        farthestFailureOriginalGoalIndex = originalGoalIndex;
+        farthestFailureContext = currentNode->currentFailureContext;
+        farthestFailureDepth = stackDepth;
+        Trace1("           ", "RecordFailure Context:  {0}", initialIndent + resolveStack->size(), fullTrace, HtnTerm::ToString(farthestFailureContext));
+    }
+    
+    if((originalGoalIndex != deepestFailureOriginalGoalIndex) || ((stackDepth >= deepestFailure) && (goal != nullptr)))
+    {
+        deepestFailure = stackDepth;
         deepestFailureGoal = goal;
         deepestFailureOriginalGoalIndex = originalGoalIndex;
         deepestFailureStack = GetStackString();
@@ -382,6 +430,17 @@ int64_t ResolveState::RecordMemoryUsage(int64_t &initialTermMemory, int64_t &ini
     return totalMemoryUsed;
 }
 
+
+void ResolveState::RecoverInitialVariables(HtnTermFactory *termFactory, UnifierType &unifier)
+{
+    // Fix variables in solution to match their initial names
+    for(UnifierItemType &assignment : unifier)
+    {
+        assignment.first = assignment.first->RemovePrefixFromVariables(termFactory, initialVariablePrefix);
+        assignment.second = assignment.second->RemovePrefixFromVariables(termFactory, initialVariablePrefix);
+    }
+}
+
 shared_ptr<UnifierType> ResolveState::SimplifySolution(const UnifierType &solution, vector<shared_ptr<HtnTerm>> &goals)
 {
     // Hard-won knowledge: In case of success, the final substitution, is the composition
@@ -411,12 +470,15 @@ shared_ptr<UnifierType> ResolveState::SimplifySolution(const UnifierType &soluti
     shared_ptr<UnifierType> simplifiedSolution = shared_ptr<UnifierType>(new UnifierType());
     for(UnifierItemType item : solution)
     {
-        if(item.first->name() != "_" && variables.find(item.first->name()) != variables.end())
+        if(item.first->name()[0] != '_' && variables.find(item.first->name()) != variables.end())
         {
             simplifiedSolution->push_back(item);
         }
     }
     
+    // Fix variables in solution to match their initial names
+    RecoverInitialVariables(termFactory, *simplifiedSolution);
+
 //    Trace3("DEBUG      ", " simplified: {0}, terms: {1}, original: {2}", 0, true, HtnGoalResolver::ToString(*simplifiedSolution.get()), HtnTerm::ToString(goals), HtnGoalResolver::ToString(solution));
     return simplifiedSolution;
 }
@@ -424,11 +486,17 @@ shared_ptr<UnifierType> ResolveState::SimplifySolution(const UnifierType &soluti
 HtnGoalResolver::HtnGoalResolver()
 {
     AddCustomRule("assert", CustomRuleType({ CustomRuleArgType::Term }, std::bind(&HtnGoalResolver::RuleAssert, std::placeholders::_1)));
-	AddCustomRule("count", CustomRuleType({ CustomRuleArgType::Variable, CustomRuleArgType::SetOfResolvedTerms }, std::bind(&HtnGoalResolver::RuleCount, std::placeholders::_1)));
+    AddCustomRule("atom_concat", CustomRuleType({ CustomRuleArgType::ResolvedTerm, CustomRuleArgType::ResolvedTerm, CustomRuleArgType::Variable }, std::bind(&HtnGoalResolver::RuleAtomConcat, std::placeholders::_1)));
+    AddCustomRule("downcase_atom", CustomRuleType({ CustomRuleArgType::ResolvedTerm, CustomRuleArgType::Variable }, std::bind(&HtnGoalResolver::RuleAtomDowncase, std::placeholders::_1)));
+    AddCustomRule("atom_chars", CustomRuleType({ CustomRuleArgType::ResolvedTerm, CustomRuleArgType::Variable }, std::bind(&HtnGoalResolver::RuleAtomChars, std::placeholders::_1)));
+    AddCustomRule("count", CustomRuleType({ CustomRuleArgType::Variable, CustomRuleArgType::SetOfResolvedTerms }, std::bind(&HtnGoalResolver::RuleCount, std::placeholders::_1)));
     AddCustomRule("distinct", CustomRuleType({ CustomRuleArgType::Variable, CustomRuleArgType::SetOfResolvedTerms }, std::bind(&HtnGoalResolver::RuleDistinct, std::placeholders::_1)));
+    AddCustomRule("failureContext", CustomRuleType({ CustomRuleArgType::SetOfTerms }, std::bind(&HtnGoalResolver::RuleFailureContext, std::placeholders::_1)));
+    AddCustomRule("findall", CustomRuleType({ CustomRuleArgType::Term, CustomRuleArgType::ResolvedTerm, CustomRuleArgType::ResolvedTerm }, std::bind(&HtnGoalResolver::RuleFindAll, std::placeholders::_1)));
     AddCustomRule("first", CustomRuleType({ CustomRuleArgType::SetOfResolvedTerms }, std::bind(&HtnGoalResolver::RuleFirst, std::placeholders::_1)));
     AddCustomRule("forall", CustomRuleType({ CustomRuleArgType::ResolvedTerm, CustomRuleArgType::ResolvedTerm }, std::bind(&HtnGoalResolver::RuleForAll, std::placeholders::_1)));
     AddCustomRule("is", CustomRuleType({ CustomRuleArgType::Variable, CustomRuleArgType::Arithmetic }, std::bind(&HtnGoalResolver::RuleIs, std::placeholders::_1)));
+    AddCustomRule("atomic", CustomRuleType({ CustomRuleArgType::Term }, std::bind(&HtnGoalResolver::RuleIsAtom, std::placeholders::_1)));
     AddCustomRule("max", CustomRuleType({ CustomRuleArgType::Variable, CustomRuleArgType::Variable, CustomRuleArgType::SetOfResolvedTerms }, std::bind(&HtnGoalResolver::RuleAggregate, std::placeholders::_1)));
     AddCustomRule("min", CustomRuleType({ CustomRuleArgType::Variable, CustomRuleArgType::Variable, CustomRuleArgType::SetOfResolvedTerms }, std::bind(&HtnGoalResolver::RuleAggregate, std::placeholders::_1)));
     AddCustomRule("nl", CustomRuleType({ }, std::bind(&HtnGoalResolver::RuleNewline, std::placeholders::_1)));
@@ -518,7 +586,7 @@ shared_ptr<vector<RuleBindingType>> HtnGoalResolver::FindAllRulesThatUnify(HtnTe
         
         bool foundRule = false;
         int goalArgumentsSize = (int) goal->arguments().size();
-        prog->AllRules([&](const HtnRule &item)
+        prog->AllRulesThatCouldUnify(goal.get(), [&](const HtnRule &item)
         {
             // If we ran out of memory budget, return whatever we found
             int64_t totalMemoryUsed = (termFactory->dynamicSize() - initialTermMemory) + (prog->dynamicSize() - initialRuleSetMemory) + memoryUsed;
@@ -529,27 +597,30 @@ shared_ptr<vector<RuleBindingType>> HtnGoalResolver::FindAllRulesThatUnify(HtnTe
                 termFactory->outOfMemory(true);
                 return false;
             }
-            
-            // Don't bother if they are not "equivalent" (i.e. the name and term count doesn't match)
-            // because it can't unify
-            if(item.head()->isEquivalentCompoundTerm(goal) || (goal->isConstant() && item.head()->isConstant()))
+        
+            // Unify
+            foundRule = true;
+            shared_ptr<UnifierType> substitutions = HtnGoalResolver::Unify(termFactory, item.head(), goal);
+            if(substitutions != nullptr)
             {
-                foundRule = true;
-                
-                // Make the variables in the rule unique
-                shared_ptr<HtnRule> currentRule = item.MakeVariablesUnique(prog, termFactory, goal->name() + lexical_cast<string>(*uniquifier) + "_" );
+                // IF the unification works, make the variables in the rule unique,
+                // since this is expensive in the inner loop
+                string uniquifierString = goal->name() + lexical_cast<string>(*uniquifier) + "_";
+                std::map<std::string, std::shared_ptr<HtnTerm>> variableMap;
+                shared_ptr<HtnRule> currentRule = item.MakeVariablesUnique(termFactory, uniquifierString, variableMap);
                 *uniquifier = (*uniquifier) + 1;
-                
-                // Then unify
-                shared_ptr<UnifierType> sub = HtnGoalResolver::Unify(termFactory, currentRule->head(), goal);
-                
-                if(sub != nullptr)
+
+                // Also need to fix up the substitutions to use the new values since we renamed them
+                for(UnifierItemType &item : *substitutions)
                 {
-                    foundRules->push_back(RuleBindingType(currentRule, *sub));
-                    memoryUsed += sizeof(RuleBindingType) + foundRules->back().second.size() * sizeof(UnifierItemType);
+                    item.first = item.first->RenameVariables(termFactory, variableMap);
+                    item.second = item.second->RenameVariables(termFactory, variableMap);
                 }
+
+                foundRules->push_back(RuleBindingType(currentRule, *substitutions));
+                memoryUsed += sizeof(RuleBindingType) + foundRules->back().second.size() * sizeof(UnifierItemType);
             }
-            
+                
             // Keep going
             return true;
         });
@@ -646,30 +717,14 @@ bool HtnGoalResolver::IsGround(UnifierType *unifier)
     return true;
 }
 
-vector<shared_ptr<HtnTerm>> HtnGoalResolver::ReplaceDontCareVariables(HtnTermFactory *termFactory, const vector<shared_ptr<HtnTerm>> &initialGoals)
-{
-    vector<shared_ptr<HtnTerm>> replacedGoals;
-    string uniquifier;
-    int dontCareCount = 0;
-    for(auto item : initialGoals)
-    {
-        shared_ptr<HtnTerm> current = item->MakeVariablesUnique(termFactory, true, uniquifier, &dontCareCount);
-        replacedGoals.push_back(current);
-    }
-    
-    return replacedGoals;
-}
-
 // returns null if no solution
 // returns a single empty UnifierType for "true" solution
 // otherwise returns an array of UnifierTypes for all the solutions
-shared_ptr<vector<UnifierType>> HtnGoalResolver::ResolveAll(HtnTermFactory *termFactory, HtnRuleSet *prog, const vector<shared_ptr<HtnTerm>> &initialGoals, int initialIndent, int memoryBudget, int64_t *highestMemoryUsedReturn)
+shared_ptr<vector<UnifierType>> HtnGoalResolver::ResolveAll(HtnTermFactory *termFactory, HtnRuleSet *prog, const vector<shared_ptr<HtnTerm>> &initialGoals, int initialIndent, int memoryBudget, int64_t *highestMemoryUsedReturn, int *furthestFailureIndex, std::vector<std::shared_ptr<HtnTerm>> *farthestFailureContext)
 {
-    Trace3("ALL BEGIN  ", "goals:{0}, termStrings:{1}, termOther:{2}", initialIndent, false, HtnTerm::ToString(initialGoals), termFactory->stringSize(), termFactory->otherAllocationSize());
+    Trace3("ALL BEGIN  ", "goals:{0}, termStringsMemorySize:{1}, termOtherMemorySize:{2}", initialIndent, false, HtnTerm::ToString(initialGoals), termFactory->stringSize(), termFactory->otherAllocationSize());
 
-    // We keep the variable names the user choose in the initial goals because them returned with the names they wanted when we are done
-    // However, any "_" variables need to be replaced by unique names so they don't get treated as the same variable (called "_") when we resolve.
-    shared_ptr<ResolveState> state = shared_ptr<ResolveState>(new ResolveState(termFactory, prog, ReplaceDontCareVariables(termFactory, initialGoals), initialIndent, memoryBudget));
+    shared_ptr<ResolveState> state = shared_ptr<ResolveState>(new ResolveState(termFactory, prog, initialGoals, initialIndent, memoryBudget));
     shared_ptr<vector<UnifierType>> solutions = shared_ptr<vector<UnifierType>>(new vector<UnifierType>());
     while(true)
     {
@@ -677,15 +732,20 @@ shared_ptr<vector<UnifierType>> HtnGoalResolver::ResolveAll(HtnTermFactory *term
         shared_ptr<UnifierType> solution = ResolveNext(state.get());
         if(solution != nullptr)
         {
-            Trace5("END        ", "Query: {0} -> {1}, termStrings:{2}, termOther:{3}, highestMemoryUsedStack:{4}", initialIndent, state->fullTrace, HtnTerm::ToString(initialGoals), ToString(*solution), termFactory->stringSize(), termFactory->otherAllocationSize(), state->highestMemoryUsedStack);
+            Trace5("END        ", "Query: {0} -> {1}, termStringsMemorySize:{2}, termOtherMemorySize:{3}, highestMemoryUsedStack:{4}", initialIndent, state->fullTrace, HtnTerm::ToString(initialGoals), ToString(*solution), termFactory->stringSize(), termFactory->otherAllocationSize(), state->highestMemoryUsedStack);
             solutions->push_back(*solution);
         }
         else
         {
-            Trace3("END        ", "No more solutions. Query: {0}, termStrings:{1}, termOther:{2}", initialIndent, state->fullTrace, HtnTerm::ToString(initialGoals), termFactory->stringSize(), termFactory->otherAllocationSize());
+            Trace3("END        ", "No more solutions. Query: {0}, termStringsMemorySize:{1}, termOtherMemorySize:{2}", initialIndent, state->fullTrace, HtnTerm::ToString(initialGoals), termFactory->stringSize(), termFactory->otherAllocationSize());
             break;
         }
         
+        if(termFactory->outOfMemory())
+        {
+            Trace4("END        ", "Out of memory. Query: {0}, termStringsMemorySize:{1}, termOtherMemorySize:{2}, highestMemoryUsedStack:{3}", initialIndent, state->fullTrace, HtnTerm::ToString(initialGoals), termFactory->stringSize(), termFactory->otherAllocationSize(), state->highestMemoryUsedStack);
+            break;
+        }
         state->ClearFailures();
     }
     
@@ -697,11 +757,27 @@ shared_ptr<vector<UnifierType>> HtnGoalResolver::ResolveAll(HtnTermFactory *term
     if(solutions->size() == 0)
     {
         // Always report a failure if there were no solutions
-        Trace6("FAIL       ", "Failed to resolve initialGoal:{0}, failed at:{1}, stack:{5}, InitialGoals:{2}, termStrings:{3}, termOther:{4}", initialIndent, true,
+        if(furthestFailureIndex != nullptr)
+        {
+            *furthestFailureIndex = state->farthestFailureOriginalGoalIndex;
+        }
+        
+        if(farthestFailureContext != nullptr)
+        {
+            *farthestFailureContext = state->farthestFailureContext;
+        }
+        
+        Trace8("FAIL       ", "Failed to resolve initialGoal:{0}, \r\nfarthest initial goal:{6}, context:{7}, \r\ndeepest failure:{1}, stack:{5}, InitialGoals:{2}, termStrings:{3}, termOther:{4}", initialIndent, true,
                state->deepestFailureOriginalGoalIndex >= 0 ? initialGoals[state->deepestFailureOriginalGoalIndex]->ToString() : "",
-               state->deepestFailureGoal != nullptr ? state->deepestFailureGoal->ToString() : "", HtnTerm::ToString(initialGoals), termFactory->stringSize(), termFactory->otherAllocationSize(), state->deepestFailureStack);
+               state->deepestFailureGoal != nullptr ? state->deepestFailureGoal->ToString() : "",
+               HtnTerm::ToString(initialGoals),
+               termFactory->stringSize(),
+               termFactory->otherAllocationSize(),
+               state->deepestFailureStack,
+               state->farthestFailureOriginalGoalIndex >= 0 ? initialGoals[state->farthestFailureOriginalGoalIndex]->ToString() : "",
+               HtnTerm::ToString(state->farthestFailureContext));
     }
-    
+        
     // Get a read on memory after we release state which is what it will look like when we return
     state = nullptr;
     
@@ -756,7 +832,7 @@ shared_ptr<UnifierType> HtnGoalResolver::ResolveNext(ResolveState *state)
         {
             // Out of memory: don't return the current solution since it is not done, and don't allow continuing
             // Since we're in an unknown state
-            Trace5("MEMORY     ", "***** OUT OF MEMORY ***** used:{0}, budget:{1}, totalTermMemory:{2}, totalRulesetMemory:{3}, highestMemoryStack:{4}", indentLevel, true, totalMemoryUsed, state->memoryBudget, termFactory->dynamicSize(), prog->dynamicSize(), state->highestMemoryUsedStack);
+            Trace6("MEMORY     ", "***** OUT OF MEMORY ***** used:{0}, budget:{1}, totalTermMemory:{2}, totalRulesetMemory:{3}, stackMemory:{4}, highestMemoryStack:{5}", indentLevel, true, totalMemoryUsed, state->memoryBudget, termFactory->dynamicSize(), prog->dynamicSize(), state->stackMemoryUsed, state->highestMemoryUsedStack);
             state->termFactory->outOfMemory(true);
             currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             return nullptr;
@@ -860,7 +936,7 @@ shared_ptr<UnifierType> HtnGoalResolver::ResolveNext(ResolveState *state)
                         // you ask "which predicates can be derived?" or in other words "which formulas are true?".
                         // So we shortcut out which will exit everything
                         Trace1("ERROR      ", "goal is a variable:{0}", indentLevel, state->fullTrace, goal->ToString());
-                        StaticFailFastAssert(false);
+                        StaticFailFastAssertDesc(false, ("goal can't be a variable: " + goal->ToString()).c_str());
                         currentNode->continuePoint = ResolveContinuePoint::ProgramError;
                         return nullptr;
                     }
@@ -882,6 +958,7 @@ shared_ptr<UnifierType> HtnGoalResolver::ResolveNext(ResolveState *state)
                             if(termFactory->outOfMemory())
                             {
                                 // Finding rules can require lots of memory so we check for OOM here
+                                Trace5("MEMORY     ", "***** OUT OF MEMORY ***** used:{0}, budget:{1}, totalTermMemory:{2}, totalRulesetMemory:{3}, highestMemoryStack:{4}", indentLevel, true, totalMemoryUsed, state->memoryBudget, termFactory->dynamicSize(), prog->dynamicSize(), state->highestMemoryUsedStack);
                                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
                             }
                             else
@@ -889,7 +966,7 @@ shared_ptr<UnifierType> HtnGoalResolver::ResolveNext(ResolveState *state)
                                 currentNode->continuePoint = ResolveContinuePoint::NextRuleThatUnifies;
                                 if(currentNode->rulesThatUnify->size() == 0)
                                 {
-                                    state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                                    state->RecordFailure(goal, currentNode);
                                 }
                                 Trace1("           ", "found:{0} rules that unify", indentLevel, state->fullTrace, currentNode->rulesThatUnify->size());
                             }
@@ -964,8 +1041,8 @@ void HtnGoalResolver::RuleAggregate(ResolveState *state)
             if(goal->arguments().size() < 3 || !goal->arguments()[0]->isVariable() || !goal->arguments()[1]->isVariable())
             {
                 // Invalid program
-                Trace2("ERROR      ", "{0}}(?AggregateVariable, ?Variable, terms...) must have at least 3 terms where the first two are variables: {1}", state->initialIndent + resolveStack->size(), state->fullTrace, aggName, goal->ToString());
-                StaticFailFastAssert(false);
+                Trace2("ERROR      ", "{0}(?AggregateVariable, ?Variable, terms...) must have at least 3 terms where the first two are variables: {1}", state->initialIndent + resolveStack->size(), state->fullTrace, aggName, goal->ToString());
+                StaticFailFastAssertDesc(false, ("item(?AggregateVariable, ?Variable, terms...) must have at least 3 terms where the first two are variables : " + goal->ToString()).c_str());
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
             else
@@ -993,7 +1070,7 @@ void HtnGoalResolver::RuleAggregate(ResolveState *state)
             {
                 // There were no solutions: fail!
                 // Put back on whatever solutions we had before the first() so we can continue adding to them
-                state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                state->RecordFailure(goal, currentNode);
                 resolveStack->pop_back();
             }
             else
@@ -1039,7 +1116,7 @@ void HtnGoalResolver::RuleAggregate(ResolveState *state)
                             // Not a number: fail!
                             // Put back on whatever solutions we had before the first() so we can continue adding to them
                             Trace4("           ", "{0}() Variable: {1} was {2} which could not be resolved to a number in {3}", state->initialIndent + resolveStack->size(), state->fullTrace, aggName, variableToAgg->ToString(), equivalence->ToString(), goal->ToString());
-                            state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                            state->RecordFailure(goal, currentNode);
                             resolveStack->pop_back();
                             break;
                         }
@@ -1049,7 +1126,7 @@ void HtnGoalResolver::RuleAggregate(ResolveState *state)
                         // No variable: fail!
                         // Put back on whatever solutions we had before the first() so we can continue adding to them
                         Trace3("           ", "{0}() Variable: {1} not found in {2}", state->initialIndent + resolveStack->size(), state->fullTrace, aggName, variableToAgg->ToString(), ToString(solution));
-                        state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                        state->RecordFailure(goal, currentNode);
                         resolveStack->pop_back();
                         break;
                     }
@@ -1096,7 +1173,7 @@ void HtnGoalResolver::RuleAssert(ResolveState* state)
 			{
 				// Invalid program
 				Trace1("ERROR      ", "assert() must have exactly one term: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
-				StaticFailFastAssert(false);
+				StaticFailFastAssertDesc(false, ("assert() must have exactly one term: " + goal->ToString()).c_str());
 				currentNode->continuePoint = ResolveContinuePoint::ProgramError;
 			}
             else
@@ -1147,6 +1224,232 @@ void HtnGoalResolver::RuleAssert(ResolveState* state)
 	}
 }
 
+// atom_chars(atom, List)
+void HtnGoalResolver::RuleAtomChars(ResolveState* state)
+{
+    shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
+    shared_ptr<HtnTerm> goal = currentNode->currentGoal();
+    shared_ptr<vector<shared_ptr<ResolveNode>>>& resolveStack = state->resolveStack;
+    HtnTermFactory* termFactory = state->termFactory;
+
+    switch (currentNode->continuePoint)
+    {
+    case ResolveContinuePoint::CustomStart:
+    {
+        if( !((goal->arguments().size() == 2) && !(goal->arguments()[0]->isVariable() && goal->arguments()[1]->isVariable())))
+        {
+            // Invalid program
+            Trace1("ERROR      ", "atom_chars() must have two terms and they both can't be variables: {0}",
+                   state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+            StaticFailFastAssertDesc(false, ("atom_chars() must have two terms and they both can't be variables: " +
+                                             goal->ToString()).c_str());
+            currentNode->continuePoint = ResolveContinuePoint::ProgramError;
+        }
+        else
+        {
+            shared_ptr<HtnTerm> term1 = goal->arguments()[0];
+            shared_ptr<HtnTerm> term2 = goal->arguments()[1];
+            
+            if(term1->isVariable())
+            {
+                // The left side is a variable, right side must be a list (due to checks above), convert it to a term
+                shared_ptr<HtnTerm> front = term2;
+                string atomName;
+                while(front->name() == "." && front->arity() == 2 && !front->arguments()[0]->isVariable())
+                {
+                    string currentChar = front->arguments()[0]->name();
+                    if(currentChar.size() == 1)
+                    {
+                        atomName.push_back(currentChar[0]);
+                        front = front->arguments()[1];
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                
+                if(atomName.size() == 0)
+                {
+                    // unification failed: fail!
+                    Trace1("FAIL       ", "atom_chars/2 rule failed because right side is empty string: {1}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+                    state->RecordFailure(goal, currentNode);
+                    resolveStack->pop_back();
+                }
+                else
+                {
+                    // Unify new term with left
+                    shared_ptr<HtnTerm> newTerm = termFactory->CreateConstant(atomName);
+                    shared_ptr<UnifierType> unifyResult = Unify(termFactory, goal->arguments()[0], newTerm);
+                    
+                    // Must work because it is a variable
+                    StaticFailFastAssert(unifyResult != nullptr);
+                    
+                    // success! Treat this node as though it unified with a rule that resolved to true.
+                    // Just like if we unified with a normal rule, we continue the depth first search skipping the current goal
+                    // The unifiers we found get added to the list of unifiers
+                    // No new goals were added since it just resolved to "true"
+                    Trace1("           ", "atom_chars/2 rule succeeded, new unification: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, ToString(*unifyResult));
+                    resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, { *unifyResult }, &(state->uniquifier)));
+                    currentNode->continuePoint = ResolveContinuePoint::Return;
+                }
+            }
+            else
+            {
+                // The right side is a variable or a list
+                // convert left into a list
+                string name = term1->name();
+                vector<shared_ptr<HtnTerm>> elements;
+                for(char c : name)
+                {
+                    elements.push_back(termFactory->CreateConstant(std::string(1, c)));
+                }
+                shared_ptr<HtnTerm> finalList = termFactory->CreateList(elements);
+                
+                // Unify with right
+                shared_ptr<UnifierType> unifyResult = Unify(termFactory, goal->arguments()[1], finalList);
+                if(unifyResult == nullptr)
+                {
+                    // unification failed: fail!
+                    Trace2("FAIL       ", "atom_chars/2 rule failed to unify {0} with: {1}", state->initialIndent + resolveStack->size(), state->fullTrace, finalList->ToString(), goal->arguments()[1]->ToString());
+                    state->RecordFailure(goal, currentNode);
+                    resolveStack->pop_back();
+                }
+                else
+                {
+                    // success! Treat this node as though it unified with a rule that resolved to true.
+                    // Just like if we unified with a normal rule, we continue the depth first search skipping the current goal
+                    // The unifiers we found get added to the list of unifiers
+                    // No new goals were added since it just resolved to "true"
+                    Trace1("           ", "atom_chars/2 rule succeeded, new unification: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, ToString(*unifyResult));
+                    resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, { *unifyResult }, &(state->uniquifier)));
+                    currentNode->continuePoint = ResolveContinuePoint::Return;
+                }
+            }
+        }
+    }
+    break;
+
+    default:
+        StaticFailFastAssert(false);
+        break;
+    }
+}
+
+// downcase_atom(a, ?A)
+void HtnGoalResolver::RuleAtomDowncase(ResolveState* state)
+{
+    shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
+    shared_ptr<HtnTerm> goal = currentNode->currentGoal();
+    shared_ptr<vector<shared_ptr<ResolveNode>>>& resolveStack = state->resolveStack;
+    HtnTermFactory* termFactory = state->termFactory;
+
+    switch (currentNode->continuePoint)
+    {
+    case ResolveContinuePoint::CustomStart:
+    {
+        if (goal->arguments().size() != 2 || !goal->arguments()[0]->isConstant() || !goal->arguments()[1]->isVariable())
+        {
+            // Invalid program
+            Trace1("ERROR      ", "downcase_atom() must have two terms, first is constant and second is variable:{0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+            StaticFailFastAssertDesc(false, ("downcase_atom() must have two terms, first is constant and second is variable: " + goal->ToString()).c_str());
+            currentNode->continuePoint = ResolveContinuePoint::ProgramError;
+        }
+        else
+        {
+            shared_ptr<HtnTerm> term1 = goal->arguments()[0];
+            shared_ptr<HtnTerm> termResult = goal->arguments()[1];
+
+            std::locale loc;
+            std::string lowercase = term1->name();
+            std::transform(lowercase.begin(), lowercase.end(), lowercase.begin(),
+                [&](char c) { return std::tolower(c, loc); });
+            shared_ptr<HtnTerm> resultAtom = termFactory->CreateConstant(lowercase);
+
+            // Just unify the two arguments
+            shared_ptr<UnifierType> result = Unify(termFactory, termResult, resultAtom);
+            if (result == nullptr)
+            {
+                // There were no solutions: fail!
+                state->RecordFailure(goal, currentNode);
+                resolveStack->pop_back();
+            }
+            else
+            {
+                // success! Treat this node as though it unified with a rule that resolved to true.
+                // Just like if we unified with a normal rule, we continue the depth first search skipping the current goal
+                // The unifiers we found get added to the list of unifiers
+                // No new goals were added since it just resolved to "true"
+                Trace1("           ", "downcase_atom() rule succeeded, new unification: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, ToString(*result));
+                resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, { *result }, &(state->uniquifier)));
+                currentNode->continuePoint = ResolveContinuePoint::Return;
+            }
+        }
+    }
+    break;
+
+    default:
+        StaticFailFastAssert(false);
+        break;
+    }
+}
+
+// atom_concat(a, b, ?ab)
+void HtnGoalResolver::RuleAtomConcat(ResolveState* state)
+{
+    shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
+    shared_ptr<HtnTerm> goal = currentNode->currentGoal();
+    shared_ptr<vector<shared_ptr<ResolveNode>>>& resolveStack = state->resolveStack;
+    HtnTermFactory* termFactory = state->termFactory;
+
+    switch (currentNode->continuePoint)
+    {
+    case ResolveContinuePoint::CustomStart:
+    {
+        // the "atom_concat" operator accepts only three terms
+        if (goal->arguments().size() != 3 || !goal->arguments()[0]->isConstant() || !goal->arguments()[1]->isConstant() || !goal->arguments()[2]->isVariable())
+        {
+            // Invalid program
+            Trace1("ERROR      ", "atom_concat() must have three terms, first two as constants and the last as variable:{0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+            StaticFailFastAssertDesc(false, ("atom_concat() must have three terms, first two as constants and the last as variable: " + goal->ToString()).c_str());
+            currentNode->continuePoint = ResolveContinuePoint::ProgramError;
+        }
+        else
+        {
+            shared_ptr<HtnTerm> term1 = goal->arguments()[0];
+            shared_ptr<HtnTerm> term2 = goal->arguments()[1];
+            shared_ptr<HtnTerm> termResult = goal->arguments()[2];
+
+            shared_ptr<HtnTerm> concatAtom = termFactory->CreateConstant(term1->name() + term2->name());
+
+            // Just unify the two arguments
+            shared_ptr<UnifierType> result = Unify(termFactory, goal->arguments()[2], concatAtom);
+            if (result == nullptr)
+            {
+                // There were no solutions: fail!
+                state->RecordFailure(goal, currentNode);
+                resolveStack->pop_back();
+            }
+            else
+            {
+                // success! Treat this node as though it unified with a rule that resolved to true.
+                // Just like if we unified with a normal rule, we continue the depth first search skipping the current goal
+                // The unifiers we found get added to the list of unifiers
+                // No new goals were added since it just resolved to "true"
+                Trace1("           ", "atom_concat() rule succeeded, new unification: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, ToString(*result));
+                resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, { *result }, &(state->uniquifier)));
+                currentNode->continuePoint = ResolveContinuePoint::Return;
+            }
+        }
+    }
+    break;
+
+    default:
+        StaticFailFastAssert(false);
+        break;
+    }
+}
+
 // Count will evaluate ALL of the potential resolutions and then only return the Number of them, if it fails the count is zero and count will NOT fail
 // No bindings will be passed along from Count but it will resolve to the total # of solutions we found
 // count(?Variable, ?SetOfResolvedTerms...)
@@ -1167,7 +1470,7 @@ void HtnGoalResolver::RuleCount(ResolveState *state)
             {
                 // Invalid program
                 Trace1("ERROR      ", "count(?Var, terms...) must have at least two terms where the first is a variable: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
-                StaticFailFastAssert(false);
+                StaticFailFastAssertDesc(false, ("count(?Var, terms...) must have at least two terms where the first is a variable: " + goal->ToString()).c_str());
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
             else
@@ -1229,7 +1532,7 @@ void HtnGoalResolver::RuleDistinct(ResolveState *state)
             {
                 // Invalid program
                 Trace1("ERROR      ", "distinct(?Var, terms...) must have at least two terms where the first is a variable: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
-                StaticFailFastAssert(false);
+                StaticFailFastAssertDesc(false, ("distinct(?Var, terms...) must have at least two terms where the first is a variable: " + goal->ToString()).c_str());
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
             else
@@ -1254,40 +1557,91 @@ void HtnGoalResolver::RuleDistinct(ResolveState *state)
             {
                 // There were no solutions: fail!
                 // Put back on whatever solutions we had before the first() so we can continue adding to them
-                state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                state->RecordFailure(goal, currentNode);
                 resolveStack->pop_back();
             }
             else
             {
                 StaticFailFastAssert((*currentNode->resolvent())[0]->arguments().size() > 1);
                 string variable = (*currentNode->resolvent())[0]->arguments()[0]->name();
-                
-                // Put all of the Evaluated values in a map along with the index where they came from
-                // OK to put HtnTerm
-                map<shared_ptr<HtnTerm>, int, HtnTermComparer> items;
-                for(int index = 0; index < solutions->size(); ++index)
+
+                vector<int> uniqueSolutionIndices;
+                if(variable[0] == '_')
                 {
-                    UnifierType &binding = (*solutions)[index];
-                    bool found = false;
-                    for(UnifierItemType item : binding)
+                    if(solutions->size() > 0)
                     {
-                        if(item.first->name() == variable)
+                        // There was no variable, return all unique combinations of variables
+                        map<vector<shared_ptr<HtnTerm>>, int, HtnTermVectorComparer> items;
+                        
+                        // Each vector representing a solution has the same variable in the same position
+                        // Assign indices for all the variables, *except* for don't care variables since we
+                        // don't care
+                        UnifierType &binding = (*solutions)[0];
+                        map<string, int> variablePositions;
+                        int position = 0;
+                        for(UnifierItemType item : binding)
                         {
-                            shared_ptr<HtnTerm> term = item.second;
-                            // Variable can contain any valid term
-                            StaticFailFastAssert(term != nullptr);
-                            if(items.find(term) == items.end())
+                            string varName = item.first->name();
+                            if(varName[0] != '_')
                             {
-                                items[term] = index;
+                                variablePositions[varName] = position;
+                                position++;
+                            }
+                        }
+                            
+                        // Now add each solution if they are unique
+                        for(int index = 0; index < solutions->size(); ++index)
+                        {
+                            vector<shared_ptr<HtnTerm>> solutionVector;
+                            solutionVector.resize(variablePositions.size());
+                            UnifierType &binding = (*solutions)[index];
+                            for(UnifierItemType item : binding)
+                            {
+                                string varName = item.first->name();
+                                if(varName[0] != '_')
+                                {
+                                    solutionVector[variablePositions[varName]] = item.second;
+                                }
                             }
                             
-                            found = true;
-                            break;
+                            if(items.find(solutionVector) == items.end())
+                            {
+                                items[solutionVector] = index;
+                                uniqueSolutionIndices.push_back(index);
+                            }
                         }
                     }
-                    
-                    // Need to have the variable available
-                    StaticFailFastAssert(found);
+                }
+                else
+                {
+                    // Put all of the Evaluated values in a map along with the index where they came from
+                    // OK to put HtnTerm
+                    map<shared_ptr<HtnTerm>, int, HtnTermComparer> items;
+                    for(int index = 0; index < solutions->size(); ++index)
+                    {
+                        UnifierType &binding = (*solutions)[index];
+                        bool found = false;
+                        for(UnifierItemType item : binding)
+                        {
+                            if(item.first->name() == variable)
+                            {
+                                shared_ptr<HtnTerm> term = item.second;
+                                // Variable can contain any valid term
+                                StaticFailFastAssert(term != nullptr);
+                                if(items.find(term) == items.end())
+                                {
+                                    items[term] = index;
+                                    uniqueSolutionIndices.push_back(index);
+                                }
+                                
+                                found = true;
+                                break;
+                            }
+                        }
+                        
+                        // Need to have the variable available
+                        StaticFailFastAssert(found);
+                    }
                 }
                 
                 // Create a fake "rule" so we can continue the search.
@@ -1295,9 +1649,9 @@ void HtnGoalResolver::RuleDistinct(ResolveState *state)
                 
                 // Add all the solutions we found as "unified rules" so we can loop through them
                 currentNode->rulesThatUnify = shared_ptr<vector<RuleBindingType>>(new vector<RuleBindingType>());
-                for(auto item : items)
+                for(int uniqueIndex : uniqueSolutionIndices)
                 {
-                    currentNode->rulesThatUnify->push_back(RuleBindingType(rule, (*solutions)[item.second]));
+                    currentNode->rulesThatUnify->push_back(RuleBindingType(rule, (*solutions)[uniqueIndex]));
                 }
                 
                 // Since the solutions we have already have the unifiers from this node already included,
@@ -1319,6 +1673,170 @@ void HtnGoalResolver::RuleDistinct(ResolveState *state)
             break;
     }
 }
+
+// failureContext is a way to report *why* something failed back to the user
+// it operates under the premise that, of all the failures that may have occurred in resolving
+// a set of terms, the one that got the farthest into the list of initial terms, and the deepest
+// (in the stack) for that term is probably the most interesting failure to report
+// It works very well as a heursitic.
+//
+// the failureContext associated with a failure will be returned from ResolveAll()
+//
+// the currently active failureContext is stored on the ResolveNode and carried forward as we
+// do a depth first recurse.  This is so that it will get rolled back properly on backtrack
+// it gets recorded as the "farthest failure" if a failure happens which
+// is the farthest point the resolver has gotten in the list of initial goals, or is equivalent
+// to the farthest in the list, but has a deeper stackdepth.
+//
+// ?Tag is simply something to help the developer figure out which error it was
+// failureContext(?Tag, ?SetOfTerms...)
+void HtnGoalResolver::RuleFailureContext(ResolveState *state)
+{
+    shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
+    shared_ptr<HtnTerm> goal = currentNode->currentGoal();
+    shared_ptr<vector<shared_ptr<ResolveNode>>> &resolveStack = state->resolveStack;
+    HtnTermFactory *termFactory = state->termFactory;
+    
+    switch(currentNode->continuePoint)
+    {
+        case ResolveContinuePoint::CustomStart:
+        {
+            if(goal->arguments().size() == 0 || goal->arguments()[0]->isVariable())
+            {
+                // Invalid program
+                Trace1("ERROR      ", "failureContext(?Order, ?SetOfTerms...) must have at least one term where the first is not a variable: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+                StaticFailFastAssertDesc(false, ("failureContext(?Order, ?SetOfTerms...) must have at least one term where the first is not a variable: " + goal->ToString()).c_str());
+                currentNode->continuePoint = ResolveContinuePoint::ProgramError;
+            }
+            else
+            {
+                // Remember the failure context in case this is the deepest failure
+                Trace1("           ", "failureContext() succeeded:  {0}", state->initialIndent + resolveStack->size(), state->fullTrace, HtnTerm::ToString(goal->arguments()));
+
+                // Rule resolves to true so no new terms, no unifiers got added since it was ground so no changes there
+                // Nothing to process on children so no special return handling
+                shared_ptr<ResolveNode> newNode = currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier));
+                
+                if(goal->arguments()[0]->name() == "clear")
+                {
+                    // Clears any failure context
+                    state->farthestFailureContext.clear();
+                    state->farthestFailureDepth = -1;
+                    newNode->currentFailureContext.clear();
+                }
+                else
+                {
+                    // Set the failure context on the new node so it will carry forward
+                    newNode->currentFailureContext = goal->arguments();
+                }
+                
+                resolveStack->push_back(newNode);
+                currentNode->continuePoint = ResolveContinuePoint::Return;
+            }
+        }
+        break;
+            
+        default:
+            StaticFailFastAssert(false);
+            break;
+    }
+}
+
+// findall(template, goal, bag)
+// Find all solutions for goal
+// create a list by looping through each solution unifying it with template
+// unify the list with bag
+void HtnGoalResolver::RuleFindAll(ResolveState *state)
+{
+    shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
+    shared_ptr<HtnTerm> goal = currentNode->currentGoal();
+    shared_ptr<vector<UnifierType>> &solutions = state->solutions;
+    shared_ptr<vector<shared_ptr<ResolveNode>>> &resolveStack = state->resolveStack;
+    HtnTermFactory *termFactory = state->termFactory;
+    
+    switch(currentNode->continuePoint)
+    {
+        case ResolveContinuePoint::CustomStart:
+        {
+            if(goal->arguments().size() < 3)
+            {
+                // Invalid program
+                Trace1("ERROR      ", "findall(template, goal, list) must have three terms: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+                StaticFailFastAssertDesc(false, ("findall(template, goal, list) must have three terms: " + goal->ToString()).c_str());
+                currentNode->continuePoint = ResolveContinuePoint::ProgramError;
+            }
+            else
+            {
+                // Make sure we keep around the value of Variables in template and any variables in goal (they won't be there when we do the resolve, so they will get stripped out)
+                shared_ptr<ResolveNode::TermSetType> variablesToKeep = shared_ptr<ResolveNode::TermSetType>(new ResolveNode::TermSetType());
+                for(shared_ptr<HtnTerm> term : *currentNode->resolvent())
+                {
+                    term->GetAllVariables(variablesToKeep.get());
+                }
+
+                // Run the resolver just on the goal as if it were a standalone resolution.  Then continue on depending on what happens
+                currentNode->PushStandaloneResolve(state, variablesToKeep, ++goal->arguments().rbegin(), --goal->arguments().rend(), ResolveContinuePoint::CustomContinue1);
+            }
+        }
+        break;
+            
+        case ResolveContinuePoint::CustomContinue1:
+        {
+            // Solutions now contains just solutions to what was in the goal term
+            shared_ptr<HtnTerm> finalList;
+            if(solutions == nullptr)
+            {
+                // There were no solutions: succeed with an empty list!
+                finalList = termFactory->CreateList({});
+            }
+            else
+            {
+                // There were solutions. Loop through each solution and replace template variables with its assignments. Add that to the solution
+                shared_ptr<HtnTerm> templateTerm = goal->arguments()[0];
+                std::vector<std::shared_ptr<HtnTerm>> terms;
+                for(auto unification : *solutions)
+                {
+                    shared_ptr<HtnTerm> replacement = templateTerm;
+                    for(UnifierItemType item : unification)
+                    {
+                        replacement = replacement->SubstituteTermForVariable(termFactory, item.second, item.first);
+                    }
+                    terms.push_back(replacement);
+                }
+                
+                finalList = termFactory->CreateList(terms);
+            }
+            
+            // Just unify the two arguments
+            shared_ptr<UnifierType> unifyResult = Unify(termFactory, goal->arguments()[2], finalList);
+            if(unifyResult == nullptr)
+            {
+                // unification failed: fail!
+                Trace1("FAIL       ", "findall() rule failed to unify result with bag: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, HtnTerm::ToString((*currentNode->resolvent())[2]->arguments()));
+                state->RecordFailure(goal, currentNode);
+                resolveStack->pop_back();
+            }
+            else
+            {
+                // success! Treat this node as though it unified with a rule that resolved to true.
+                // Just like if we unified with a normal rule, we continue the depth first search skipping the current goal
+                // The unifiers we found get added to the list of unifiers
+                // No new goals were added since it just resolved to "true"
+                Trace1("           ", "findall() rule succeeded, new unification: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, ToString(*unifyResult));
+                resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, { *unifyResult }, &(state->uniquifier)));
+                currentNode->continuePoint = ResolveContinuePoint::Return;
+            }
+            
+            currentNode->PopStandaloneResolve(state);
+        }
+            break;
+            
+        default:
+            StaticFailFastAssert(false);
+            break;
+    }
+}
+
 
 // first(?SetOfResolvedTerms...)
 void HtnGoalResolver::RuleFirst(ResolveState *state)
@@ -1352,7 +1870,7 @@ void HtnGoalResolver::RuleFirst(ResolveState *state)
             if(solutions == nullptr)
             {
                 // There were no solutions: fail!
-                state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                state->RecordFailure(goal, currentNode);
                 resolveStack->pop_back();
             }
             else
@@ -1407,7 +1925,7 @@ void HtnGoalResolver::RuleForAll(ResolveState *state)
             {
                 // Invalid program
                 Trace1("ERROR      ", "forall(term1, term2) must have exactly two terms: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
-                StaticFailFastAssert(false);
+                StaticFailFastAssertDesc(false, ("forall(term1, term2) must have exactly two terms: " + goal->ToString()).c_str());
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
             else
@@ -1428,7 +1946,7 @@ void HtnGoalResolver::RuleForAll(ResolveState *state)
                 // There were no solutions: so it is a failure!
                 // Just like if we couldn't find rules to unify with, we stop the depth first search here
                 Trace1("FAIL       ", "forall() rule failed: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, HtnTerm::ToString((*currentNode->resolvent())[0]->arguments()));
-                state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                state->RecordFailure(goal, currentNode);
                 resolveStack->pop_back();
             }
             else
@@ -1454,7 +1972,9 @@ void HtnGoalResolver::RuleForAll(ResolveState *state)
     }
 }
 
-// is(?Variable, ?Term)
+// The second argument must be ground
+// The first argument can be ground OR a variable
+// is(?Variable | ?Term, ?Term)
 void HtnGoalResolver::RuleIs(ResolveState *state)
 {
     shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
@@ -1466,32 +1986,66 @@ void HtnGoalResolver::RuleIs(ResolveState *state)
     {
         case ResolveContinuePoint::CustomStart:
         {
-            // the "is" operator is not treated as a rule, it is handled as a way to unify a variable with the result of an arithmetic calculation
-            if(goal->arguments().size() != 2 || !goal->arguments()[0]->isVariable() || !goal->arguments()[1]->isArithmetic())
+            // the "is" operator handled as a way to unify a variable with the result of an arithmetic calculation
+            // OR to test equality of a term with an arithmetic calculation
+            if(goal->arguments().size() != 2 || !goal->arguments()[1]->isArithmetic())
             {
                 // Invalid program
-                Trace1("ERROR      ", "is() must have two terms where one is a variable and one is arithmetic and ground:{0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
-                StaticFailFastAssert(false);
+                Trace1("ERROR      ", "is() must have two terms where the left can be a variable or a term and the right is arithmetic and ground:{0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+                StaticFailFastAssertDesc(false, ("is() must have two terms where the left can be a variable or a term and the right is arithmetic and ground: " + goal->ToString()).c_str());
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
             else
             {
-                shared_ptr<HtnTerm> variable = goal->arguments()[0];
+                shared_ptr<HtnTerm> lValue = goal->arguments()[0];
                 shared_ptr<HtnTerm> expression = goal->arguments()[1];
                 shared_ptr<HtnTerm> exprResult = expression->Eval(termFactory);
                 if(exprResult != nullptr)
                 {
-                    // We treat this as a rule where the variable got unified with the result. So, there are no new goals to add, but there are new unifiers
-                    // Nothing to do on return
-                    UnifierType exprUnifier( { UnifierItemType(variable, exprResult) } );
-                    resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, exprUnifier, &(state->uniquifier)));
-                    currentNode->continuePoint = ResolveContinuePoint::Return;
+                    if(lValue->isVariable())
+                    {
+                        // We treat this as a rule where the lValue got unified with the result. So, there are no new goals to add, but there are new unifiers
+                        // Nothing to do on return
+                        UnifierType exprUnifier( { UnifierItemType(lValue, exprResult) } );
+                        resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, exprUnifier, &(state->uniquifier)));
+                        currentNode->continuePoint = ResolveContinuePoint::Return;
+                        Trace2("           ", "is() succeeded {0} = {1}}", state->initialIndent + resolveStack->size(), state->fullTrace, lValue->ToString(), exprResult->ToString());
+                    }
+                    else
+                    {
+                        if(lValue->isArithmetic())
+                        {
+                            shared_ptr<HtnTerm> lValueResult = lValue->Eval(termFactory);
+                            if(lValueResult->TermCompare(*exprResult) == 0)
+                            {
+                                // Rule resolves to true so no new terms, no unifiers got added since it was ground so no changes there
+                                // Nothing to process on children so no special return handling
+                                resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
+                                currentNode->continuePoint = ResolveContinuePoint::Return;
+                                Trace2("           ", "is() succeeded {0} == {1}", state->initialIndent + resolveStack->size(), state->fullTrace, lValueResult->ToString(), exprResult->ToString());
+                            }
+                            else
+                            {
+                                // lValue != rValue so it fails
+                                Trace2("FAIL       ", "{0} is not {1}", state->initialIndent + resolveStack->size(), state->fullTrace, lValueResult->ToString(), exprResult->ToString());
+                                state->RecordFailure(goal, currentNode);
+                                resolveStack->pop_back();
+                            }
+                        }
+                        else
+                        {
+                            // lValue is not arithmetic so it fails
+                            Trace1("FAIL       ", "not arithmetic {0}", state->initialIndent + resolveStack->size(), state->fullTrace, lValue->ToString());
+                            state->RecordFailure(goal, currentNode);
+                            resolveStack->pop_back();
+                        }
+                    }
                 }
                 else
                 {
                     // expression can't be resolved, therefore nothing down this branch can work and it fails
                     Trace1("FAIL       ", "can't arithmetically evaluate {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
-                    state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                    state->RecordFailure(goal, currentNode);
                     resolveStack->pop_back();
                 }
             }
@@ -1501,6 +2055,53 @@ void HtnGoalResolver::RuleIs(ResolveState *state)
         default:
             StaticFailFastAssert(false);
             break;
+    }
+}
+
+// isAtom(term)
+void HtnGoalResolver::RuleIsAtom(ResolveState* state)
+{
+    shared_ptr<ResolveNode> currentNode = state->resolveStack->back();
+    shared_ptr<HtnTerm> goal = currentNode->currentGoal();
+    shared_ptr<vector<shared_ptr<ResolveNode>>>& resolveStack = state->resolveStack;
+    HtnTermFactory* termFactory = state->termFactory;
+
+    switch (currentNode->continuePoint)
+    {
+    case ResolveContinuePoint::CustomStart:
+    {
+        // the "atom" operator accepts only one term
+        if (goal->arguments().size() != 1)
+        {
+            // Invalid program
+            Trace1("ERROR      ", "atom() must have one term:{0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+            StaticFailFastAssertDesc(false, ("atom() must have one term: " + goal->ToString()).c_str());
+            currentNode->continuePoint = ResolveContinuePoint::ProgramError;
+        }
+        else
+        {
+            shared_ptr<HtnTerm> term = goal->arguments()[0];
+            if (term->isConstant())
+            {
+                // Rule resolves to true so no new terms, no unifiers got added since it was ground so no changes there
+                // Nothing to process on children so no special return handling
+                resolveStack->push_back(currentNode->CreateChildNode(termFactory, *state->initialGoals, {}, {}, &(state->uniquifier)));
+                currentNode->continuePoint = ResolveContinuePoint::Return;
+            }
+            else
+            {
+                // Not an atom, therefore nothing down this branch can work and it fails
+                Trace1("FAIL       ", "not an atom {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
+                state->RecordFailure(goal, currentNode);
+                resolveStack->pop_back();
+            }
+        }
+    }
+    break;
+
+    default:
+        StaticFailFastAssert(false);
+        break;
     }
 }
 
@@ -1521,7 +2122,7 @@ void HtnGoalResolver::RuleNewline(ResolveState *state)
             {
                 // Invalid program
                 Trace2("ERROR      ", "nl() must have zero terms: {1}", state->initialIndent + resolveStack->size(), state->fullTrace, opName, goal->ToString());
-                StaticFailFastAssert(false);
+                StaticFailFastAssertDesc(false, ("nl() must have zero terms: " + goal->ToString()).c_str());
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
             else
@@ -1579,7 +2180,7 @@ void HtnGoalResolver::RuleNot(ResolveState *state)
                 // There were solutions: fail!
                 // Just like if we couldn't find rules to unify with, we stop the depth first search here
                 Trace1("FAIL       ", "not() rule failed, goals are true: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, HtnTerm::ToString((*currentNode->resolvent())[0]->arguments()));
-                state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                state->RecordFailure(goal, currentNode);
                 resolveStack->pop_back();
             }
             
@@ -1612,7 +2213,7 @@ void HtnGoalResolver::RuleRetract(ResolveState* state)
 			{
 				// Invalid program
 				Trace1("ERROR      ", "retract() must have exactly one term: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
-				StaticFailFastAssert(false);
+				StaticFailFastAssertDesc(false, ("retract() must have exactly one term: " + goal->ToString()).c_str());
 				currentNode->continuePoint = ResolveContinuePoint::ProgramError;
 			}
             else
@@ -1628,7 +2229,7 @@ void HtnGoalResolver::RuleRetract(ResolveState* state)
                     else
                     {
                         Trace1("FAIL       ", "retract() rule failed, fact doesn't exist: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, term->ToString());
-                        state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                        state->RecordFailure(goal, currentNode);
                         resolveStack->pop_back();
                         return;
                     }
@@ -1690,7 +2291,7 @@ void HtnGoalResolver::RuleRetractAll(ResolveState* state)
             {
                 // Invalid program
                 Trace1("ERROR      ", "retractall() must have exactly one term: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
-                StaticFailFastAssert(false);
+                StaticFailFastAssertDesc(false, ("retractall() must have exactly one term: " + goal->ToString()).c_str());
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
             else
@@ -1702,7 +2303,7 @@ void HtnGoalResolver::RuleRetractAll(ResolveState* state)
                        // We only remove facts, so skip rules
                        // Don't bother if they are not "equivalent" (i.e. the name and term count doesn't match)
                        // because it can't unify
-                       if(item.IsFact() && (item.head()->isEquivalentCompoundTerm(term)))
+                       if(item.IsFact() && (item.head()->isEquivalentCompoundTerm(term.get())))
                        {
                            shared_ptr<UnifierType> sub = HtnGoalResolver::Unify(termFactory, item.head(), term);
                            
@@ -1783,7 +2384,7 @@ void HtnGoalResolver::RuleSortBy(ResolveState *state)
             {
                 // Invalid program
                 Trace1("ERROR      ", "sortBy(?Var, comparer(...)) must have exactly two terms where the first is a variable: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
-                StaticFailFastAssert(false);
+                StaticFailFastAssertDesc(false, ("sortBy(?Var, comparer(...)) must have exactly two terms where the first is a variable: " + goal->ToString()).c_str());
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
             else
@@ -1808,7 +2409,7 @@ void HtnGoalResolver::RuleSortBy(ResolveState *state)
             {
                 // There were no solutions: fail!
                 // Put back on whatever solutions we had before the first() so we can continue adding to them
-                state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                state->RecordFailure(goal, currentNode);
                 resolveStack->pop_back();
             }
             else
@@ -1901,7 +2502,7 @@ void HtnGoalResolver::RuleTermCompare(ResolveState *state)
             {
                 // Invalid program
                 Trace1("ERROR      ", "{0} must have two terms", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
-                StaticFailFastAssert(false);
+                StaticFailFastAssertDesc(false, ("Must have two terms: " + goal->ToString()).c_str());
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
             else
@@ -1921,7 +2522,7 @@ void HtnGoalResolver::RuleTermCompare(ResolveState *state)
                 else
                 {
                     Trace1("FAIL       ", "{0} failed", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
-                    state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                    state->RecordFailure(goal, currentNode);
                     resolveStack->pop_back();
                 }
             }
@@ -1991,7 +2592,7 @@ void HtnGoalResolver::RuleUnify(ResolveState *state)
             {
                 // Invalid program
                 Trace1("ERROR      ", "=() must have two terms: {0}", state->initialIndent + resolveStack->size(), state->fullTrace, goal->ToString());
-                StaticFailFastAssert(false);
+                StaticFailFastAssertDesc(false, ("=() must have two terms: " + goal->ToString()).c_str());
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
             else
@@ -2001,7 +2602,7 @@ void HtnGoalResolver::RuleUnify(ResolveState *state)
                 if(result == nullptr)
                 {
                     // There were no solutions: fail!
-                    state->RecordFailure(goal, currentNode->CountOfGoalsLeftToProcess());
+                    state->RecordFailure(goal, currentNode);
                     resolveStack->pop_back();
                 }
                 else
@@ -2041,7 +2642,7 @@ void HtnGoalResolver::RuleWrite(ResolveState *state)
             {
                 // Invalid program
                 Trace2("ERROR      ", "{0}() must have one term: {1}", state->initialIndent + resolveStack->size(), state->fullTrace, opName, goal->ToString());
-                StaticFailFastAssert(false);
+                StaticFailFastAssertDesc(false, ("Must have one term: " + goal->ToString()).c_str());
                 currentNode->continuePoint = ResolveContinuePoint::ProgramError;
             }
             else
@@ -2140,40 +2741,47 @@ shared_ptr<vector<shared_ptr<HtnTerm>>> HtnGoalResolver::SubstituteUnifiers(HtnT
     return substituted;
 }
 
-string HtnGoalResolver::ToString(const vector<UnifierType> *unifierList)
+string HtnGoalResolver::ToString(const vector<UnifierType> *unifierList, bool json)
 {
     if(unifierList == nullptr)
     {
-        return "null";
+        return json ? "" : "null";
     }
     
     stringstream stream;
     
-    stream << "(";
+    stream << (json ? "[" : "(");
     bool hasItem = false;
     for(auto item : *unifierList)
     {
-        stream << (hasItem ? ", " : "") << ToString(item);
+        stream << (hasItem ? ", " : "") << ToString(item, json);
         hasItem = true;
     }
     
-    stream << ")";
+    stream << (json ? "]" : ")");
     return stream.str();
 }
 
-string HtnGoalResolver::ToString(const UnifierType &unifier)
+string HtnGoalResolver::ToString(const UnifierType &unifier, bool json)
 {
     stringstream stream;
     
-    stream << "(";
+    stream << (json ? "{" : "(");
     bool hasItem = false;
     for(auto item : unifier)
     {
-        stream << (hasItem ? ", " : "") << item.first->ToString() << " = " << item.second->ToString();
+        if (json)
+        {
+            stream << (hasItem ? ", " : "") << "\"" << item.first->ToString() << "\" : " << item.second->ToString(false, true);
+        }
+        else
+        {
+            stream << (hasItem ? ", " : "") << item.first->ToString() << " = " << item.second->ToString();
+        }
         hasItem = true;
     }
     
-    stream << ")";
+    stream << (json ? "}" : ")");
     return stream.str();
 }
 
@@ -2198,9 +2806,10 @@ shared_ptr<UnifierType> HtnGoalResolver::Unify(HtnTermFactory *factory, shared_p
 {
     if(term1 == nullptr || term2 == nullptr) return nullptr;
     
-    TraceString2("HtnGoalResolver::Unify {0}={1}",
-                 SystemTraceType::Unifier, TraceDetail::Diagnostic,
-                 term1->ToString(), term2->ToString());
+    uint64_t &uniquifier = factory->uniquifier();
+//    TraceString2("HtnGoalResolver::Unify {0}={1}",
+//                 SystemTraceType::Unifier, TraceDetail::Diagnostic,
+//                 term1->ToString(), term2->ToString());
     
     // solution.first = left side of equality, solution.second = right
     shared_ptr<UnifierType> solution = shared_ptr<UnifierType>(new UnifierType);
@@ -2213,29 +2822,69 @@ shared_ptr<UnifierType> HtnGoalResolver::Unify(HtnTermFactory *factory, shared_p
     
     while(!remainingStack.empty())
     {
-        TraceString("Solution:", SystemTraceType::Unifier, TraceDetail::Diagnostic);
-        for(pair<shared_ptr<HtnTerm>,shared_ptr<HtnTerm>> item : *solution)
-        {
-            TraceString2("...solution: {0}={1}",
-                         SystemTraceType::Unifier, TraceDetail::Diagnostic,
-                         item.first->ToString(), item.second->ToString());
-        }
-        
-        TraceString("Stack:", SystemTraceType::Unifier, TraceDetail::Diagnostic);
-        for(pair<shared_ptr<HtnTerm>,shared_ptr<HtnTerm>> item : remainingStack)
-        {
-            TraceString2("...stack: {0}={1}",
-                         SystemTraceType::Unifier, TraceDetail::Diagnostic,
-                         item.first->ToString(), item.second->ToString());
-        }
+//        TraceString("Solution:", SystemTraceType::Unifier, TraceDetail::Diagnostic);
+//        for(pair<shared_ptr<HtnTerm>,shared_ptr<HtnTerm>> item : *solution)
+//        {
+//            TraceString2("...solution: {0}={1}",
+//                         SystemTraceType::Unifier, TraceDetail::Diagnostic,
+//                         item.first->ToString(), item.second->ToString());
+//        }
+//
+//        TraceString("Stack:", SystemTraceType::Unifier, TraceDetail::Diagnostic);
+//        for(pair<shared_ptr<HtnTerm>,shared_ptr<HtnTerm>> item : remainingStack)
+//        {
+//            TraceString2("...stack: {0}={1}",
+//                         SystemTraceType::Unifier, TraceDetail::Diagnostic,
+//                         item.first->ToString(), item.second->ToString());
+//        }
         
         pair<shared_ptr<HtnTerm>, shared_ptr<HtnTerm>> current = remainingStack.back();
         remainingStack.pop_back();
-        shared_ptr<HtnTerm> x = current.first;
-        shared_ptr<HtnTerm> y = current.second;
+        // If X or Y is a "don't care" variable that hasn't been renamed yet, give it a unique value now
+        // We can do this because, by definition, every instance of "_" is a new variable
+        // So we don't have to fix them up in the resolvent to match
+        shared_ptr<HtnTerm> x;
+        bool xIsDontCare = false;
+        shared_ptr<HtnTerm> y;
+        bool yIsDontCare = false;
+        if(current.first->isVariable())
+        {
+            std::string name = current.first->name();
+            if(name.size() == 1 && name[0] == '_')
+            {
+                xIsDontCare = true;
+                x = factory->CreateVariable("_" + lexical_cast<string>(uniquifier++));
+            }
+            else
+            {
+                x = current.first;
+            }
+        }
+        else
+        {
+            x = current.first;
+        }
+
+        if(current.second->isVariable())
+        {
+            std::string name = current.second->name();
+            if(name.size() == 1 && name[0] == '_')
+            {
+                yIsDontCare = true;
+                y = factory->CreateVariable("_" + lexical_cast<string>(uniquifier++));
+            }
+            else
+            {
+                y = current.second;
+            }
+        }
+        else
+        {
+            y = current.second;
+        }
         
         // If X is a variable that does not occur in Y..
-        if(x->isVariable() && !y->OccursCheck(x))
+        if(x->isVariable() && (xIsDontCare || !y->OccursCheck(x)))
         {
             // Substitute Y for X in the stack and in the solution
             SubstituteAllVariables(factory, y, x, remainingStack, *solution);
@@ -2243,7 +2892,7 @@ shared_ptr<UnifierType> HtnGoalResolver::Unify(HtnTermFactory *factory, shared_p
             // add X = Y to solution
             solution->push_back(pair<shared_ptr<HtnTerm>, shared_ptr<HtnTerm>>(x, y));
         }
-        else if(y->isVariable() && !x->OccursCheck(y))
+        else if(y->isVariable() && (yIsDontCare || !x->OccursCheck(y)))
         {
             // Substitute X for Y in the stack and in the solution
             SubstituteAllVariables(factory, x, y, remainingStack, *solution);
@@ -2251,13 +2900,14 @@ shared_ptr<UnifierType> HtnGoalResolver::Unify(HtnTermFactory *factory, shared_p
             // add Y = X to solution
             solution->push_back(pair<shared_ptr<HtnTerm>, shared_ptr<HtnTerm>>(y, x));
         }
-        else if(((x->isVariable() && y->isVariable()) && x == y) ||
-                ((x->isConstant() && y->isConstant()) && x->name() == y->name()))
+        else if(!(xIsDontCare || yIsDontCare) &&
+                (((x->isVariable() && y->isVariable()) && x == y) ||
+                ((x->isConstant() && y->isConstant()) && x->nameEqualTo(*y))))
         {
             // X && Y are identical constants or Variables
             continue;
         }
-        else if(x->isEquivalentCompoundTerm(y))
+        else if(x->isEquivalentCompoundTerm(y.get()))
         {
             // X is f(X1...,Xn) and Y is f(Y1...,Yn) for some functor f and n > 0
             // push Xi = Yi , i=1...n, on the stack
@@ -2273,17 +2923,17 @@ shared_ptr<UnifierType> HtnGoalResolver::Unify(HtnTermFactory *factory, shared_p
         else
         {
             // Fail
-            TraceString("Final Solution: FAIL", SystemTraceType::Unifier, TraceDetail::Diagnostic);
+//            TraceString("Final Solution: FAIL", SystemTraceType::Unifier, TraceDetail::Diagnostic);
             return nullptr;
         }
     }
     
-    TraceString("Final Solution:", SystemTraceType::Unifier, TraceDetail::Diagnostic);
-    for(pair<shared_ptr<HtnTerm>,shared_ptr<HtnTerm>> item : *solution)
-    {
-        TraceString2("...solution {0}={1}",
-                     SystemTraceType::Unifier, TraceDetail::Diagnostic,
-                     item.first->ToString(), item.second->ToString());
-    }
+//    TraceString("Final Solution:", SystemTraceType::Unifier, TraceDetail::Diagnostic);
+//    for(pair<shared_ptr<HtnTerm>,shared_ptr<HtnTerm>> item : *solution)
+//    {
+//        TraceString2("...solution {0}={1}",
+//                     SystemTraceType::Unifier, TraceDetail::Diagnostic,
+//                     item.first->ToString(), item.second->ToString());
+//    }
     return solution;
 }

@@ -9,6 +9,7 @@
 #ifndef HtnTerm_hpp
 #define HtnTerm_hpp
 #include <cmath>
+#include <map>
 #include <memory>
 #include <set>
 #include <sstream>
@@ -34,7 +35,7 @@ enum class HtnTermType
     Compound = 4
 };
 
-// Terms are immutable, this is required because their signature (name, argument count, argument name, etc) is used
+// Terms are immutable, this is required because their signature (name, argument count, argument name, etc) are used
 // as the primary way to find them in the HtnRuleSet.  Making them immutable means we can keep them in a map.
 // A term is variable, or a compound term which has a name and 0 or more arguments (which are also terms)
 // A compound term with no arguments is called a constant
@@ -45,6 +46,11 @@ public:
     ~HtnTerm();
     const std::vector<std::shared_ptr<HtnTerm>> &arguments() const { return m_arguments; }
     int arity() const { return (int) m_arguments.size(); }
+    // Very efficient name comparison because names are interned
+    bool nameEqualTo(const HtnTerm &other) const
+    {
+        return m_namePtr == other.m_namePtr;
+    }
     int64_t dynamicSize();
     std::shared_ptr<HtnTerm> Eval(HtnTermFactory *factory);
     void GetAllVariables(std::vector<std::string> *result);
@@ -60,22 +66,28 @@ public:
     bool isCompoundTerm() { return arity() > 0; }
     bool isConstant() const { return !m_isVariable && m_arguments.size() == 0; }
 	bool isCut() const { return  *m_namePtr == "!";  }
-    bool isEquivalentCompoundTerm(std::shared_ptr<HtnTerm> other) { return isCompoundTerm() && other->isCompoundTerm() && arity() == other->arity() && name() == other->name(); }
+    // We can compare pointers for equivalence because names are interned
+    bool isEquivalentCompoundTerm(const HtnTerm *other) const { return arity() == other->arity() && m_namePtr == other->m_namePtr; }
+    bool isList() const { return (arity() == 0 && name() == "[]") || (arity() == 2 && name() == ".");  }
     bool isGround() const;
     void SetInterned() { m_isInterned = true; };
     bool isTrue() const { return !m_isVariable && *m_namePtr == "true"; }
     bool isVariable() const { return m_isVariable; }
-    std::shared_ptr<HtnTerm> MakeVariablesUnique(HtnTermFactory *factory, bool onlyDontCareVariables, const std::string &uniquifier, int* dontCareCount);
+    std::shared_ptr<HtnTerm> MakeVariablesUnique(HtnTermFactory *factory, bool onlyDontCareVariables, const std::string &uniquifier, int* dontCareCount, std::map<std::string, std::shared_ptr<HtnTerm>> &variableMap);
     std::string name() const { return m_isVariable ? m_namePtr->substr(1, m_namePtr->size() - 1) : *m_namePtr; }
     bool OccursCheck(std::shared_ptr<HtnTerm> variable) const;
     bool operator==(const HtnTerm &other) const;
+    std::shared_ptr<HtnTerm> RemovePrefixFromVariables(HtnTermFactory *factory, const std::string &prefix);
+    std::shared_ptr<HtnTerm> RenameVariables(HtnTermFactory *factory, std::map<std::string, std::shared_ptr<HtnTerm>> variableMap);
     std::shared_ptr<HtnTerm> ResolveArithmeticTerms(HtnTermFactory *factory);
     std::shared_ptr<HtnTerm> SubstituteTermForVariable(HtnTermFactory *factory, std::shared_ptr<HtnTerm> newTerm, std::shared_ptr<HtnTerm> existingVariable);
     // Compares using prolog comparison rules
     int TermCompare(const HtnTerm &other);
-    std::string ToString(bool isInList = false);
-    static std::string ToString(const std::vector<std::shared_ptr<HtnTerm>> &goals, bool surroundWithParenthesis = true);
+    std::string ToString(bool isSecondTermInList = false, bool json = false);
+    static std::string ToString(const std::vector<std::shared_ptr<HtnTerm>> &goals, bool surroundWithParenthesis = true, bool json = false);
     
+    const std::string *m_namePtr;
+
 private:
     // All constructors are private so that TermFactory is used so we can track memory easier
     friend class HtnTermFactory;
@@ -95,8 +107,38 @@ private:
     std::vector<std::shared_ptr<HtnTerm>> m_arguments;
     bool m_isInterned;
     bool m_isVariable;
-    const std::string *m_namePtr;
     std::weak_ptr<HtnTermFactory> m_factory;
+};
+
+class HtnTermVectorComparer
+{
+public:
+    bool operator() (const std::vector<std::shared_ptr<HtnTerm>> left, const std::vector<std::shared_ptr<HtnTerm>> right) const
+    {
+        if(left.size() < right.size())
+        {
+            return true;
+        }
+        else if(left.size() > right.size())
+        {
+            return false;
+        }
+        
+        for(int index = (int) left.size() - 1; index >= 0 ; --index)
+        {
+            int compareResult = left[index]->TermCompare(*right[index].get());
+            if(compareResult < 0)
+            {
+                return true;
+            }
+            else if(compareResult > 0)
+            {
+                return false;
+            }
+        }
+        
+        return false;
+    }
 };
 
 class HtnTermComparer

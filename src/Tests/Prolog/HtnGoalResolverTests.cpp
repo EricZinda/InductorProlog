@@ -6,6 +6,8 @@
 //  Copyright © 2018 Eric Zinda. All rights reserved.
 //
 #include <iostream>
+// #include "FXPlatform/FileStream.h"
+#include "FXPlatform/Logger.h"
 #include "FXPlatform/Prolog/HtnGoalResolver.h"
 #include "FXPlatform/Prolog/HtnRuleSet.h"
 #include "FXPlatform/Prolog/HtnTerm.h"
@@ -67,12 +69,112 @@ bool CheckSolutions(vector<UnifierType> solution, vector<UnifierType> expectedSo
     
     return solution.size() == 0;
 }
-
+    
 SUITE(HtnGoalResolverTests)
 {
+//     TEST(AdventureScenarioTests)
+//     {
+// //        SetTraceFilter((int) SystemTraceType::Solver | (int) SystemTraceType::System, TraceDetail::Diagnostic);
+
+//         HtnGoalResolver resolver;
+//         shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+//         shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+//         shared_ptr<PrologStandardCompiler> compiler = shared_ptr<PrologStandardCompiler>(new PrologStandardCompiler(factory.get(), state.get()));
+//         shared_ptr<vector<UnifierType>> unifier;
+//         string testState;
+//         string sharedState;
+//         string goals;
+//         string finalUnifier;
+//         string example;
+//         int64_t highestMemoryUsedReturn;
+//         int furthestFailureIndex;
+//         std::vector<std::shared_ptr<HtnTerm>> farthestFailureContext;
+
+//         FileStream stream;
+//         stream.Open("Adventure.pl", OpenExisting, Read);
+//         example = stream.ReadAll();
+//         testState = "";
+
+//         compiler->Clear();
+//         goals = "goals(=(CreateOrEval, create), d_noun(place, X9005), d_pronoun(you, X9006), d_loc_nonsp(E9004, X9006, X9005, CreateOrEval)).";
+//         CHECK(compiler->Compile(example + sharedState + testState + goals));
+//         unifier = compiler->SolveGoals(&resolver, 1000000, &highestMemoryUsedReturn, &furthestFailureIndex, &farthestFailureContext);
+//         finalUnifier = HtnGoalResolver::ToString(unifier.get());
+// //        int64_t factorySize = factory->dynamicSize();
+// //        CHECK_EQUAL(finalUnifier, "((?CreateOrEval = create, ?E9001 = id9007, ?X9002 = diamond1, ?X9003 = player))");
+// //        CHECK_EQUAL(0, furthestFailureIndex);
+// //        CHECK_EQUAL(0, farthestFailureContext.size());
+//     }
+    
+    TEST(GoalResolverFailureContextTest)
+    {
+        HtnGoalResolver resolver;
+        shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+        shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+        shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+        shared_ptr<vector<UnifierType>> unifier;
+        string testState;
+        string sharedState;
+        string goals;
+        string finalUnifier;
+        string example;
+        int furthestFailureIndex;
+        std::vector<std::shared_ptr<HtnTerm>> farthestFailureContext;
+
+        example =
+            "test(?X) :- tile(?X, 1)."
+            "test2(?X) :- failureContext(1, foo), tile(?X, 1)."
+            "test3(?X) :- failureContext(1, foo), tile(0, 1), failureContext(2, foo2), tile(?X, 1)."
+            ;
+        testState = "tile(0,0). tile(0,1). \r\n";
+
+        // If there is no use of FailureContext, nothing is returned but index still works
+        compiler->Clear();
+        goals = "goals(test(0), test(1)).";
+        CHECK(compiler->Compile(example + sharedState + testState + goals));
+        unifier = compiler->SolveGoals(&resolver, 1000000, nullptr, &furthestFailureIndex, &farthestFailureContext);
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "null");
+        CHECK_EQUAL(1, furthestFailureIndex);
+        CHECK_EQUAL(0, farthestFailureContext.size());
+
+        // FailureContext is returned if used
+        compiler->Clear();
+        goals = "goals(test2(0), test2(1)).";
+        CHECK(compiler->Compile(example + sharedState + testState + goals));
+        unifier = compiler->SolveGoals(&resolver, 1000000, nullptr, &furthestFailureIndex, &farthestFailureContext);
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "null");
+        CHECK_EQUAL(1, furthestFailureIndex);
+        CHECK_EQUAL(2, farthestFailureContext.size());
+        CHECK_EQUAL("{\"1\":[]}, {\"foo\":[]}", HtnTerm::ToString(farthestFailureContext, false, true));
+        
+        // The highest FailureContext is returned in a function
+        compiler->Clear();
+        goals = "goals(test3(0), test3(1)).";
+        CHECK(compiler->Compile(example + sharedState + testState + goals));
+        unifier = compiler->SolveGoals(&resolver, 1000000, nullptr, &furthestFailureIndex, &farthestFailureContext);
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "null");
+        CHECK_EQUAL(1, furthestFailureIndex);
+        CHECK_EQUAL(2, farthestFailureContext.size());
+        CHECK_EQUAL("{\"2\":[]}, {\"foo2\":[]}", HtnTerm::ToString(farthestFailureContext, false, true));
+
+        // FailureContext is still active if it isn't cleared
+        compiler->Clear();
+        goals = "goals(test3(0), test3(0), test(1)).";
+        CHECK(compiler->Compile(example + sharedState + testState + goals));
+        unifier = compiler->SolveGoals(&resolver, 1000000, nullptr, &furthestFailureIndex, &farthestFailureContext);
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL("null", finalUnifier);
+        CHECK_EQUAL(2, furthestFailureIndex);
+        CHECK_EQUAL(2, farthestFailureContext.size());
+        CHECK_EQUAL("{\"2\":[]}, {\"foo2\":[]}", HtnTerm::ToString(farthestFailureContext, false, true));
+    }
+    
     TEST(HtnGoalResolverSquareScenarioTest)
     {
-        //SetTraceFilter((int) SystemTraceType::Solver | (int) SystemTraceType::System, TraceDetail::Diagnostic);
+//        SetTraceFilter((int) SystemTraceType::Solver | (int) SystemTraceType::System, TraceDetail::Diagnostic);
 
         HtnGoalResolver resolver;
         shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
@@ -485,7 +587,204 @@ SUITE(HtnGoalResolverTests)
         finalUnifier = HtnGoalResolver::ToString(unifier.get());
         CHECK_EQUAL(finalUnifier, "((?Y = letter(?X), ?Z = capital(?X)))");
     }
+   
+    TEST(HtnGoalResolverListTests)
+    {
+        HtnGoalResolver resolver;
+        shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+        shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+        shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+        string testState;
+        string goals;
+        string finalUnifier;
+        shared_ptr<vector<UnifierType>> unifier;
+
+//                SetTraceFilter((int) SystemTraceType::Planner | (int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+
+        // ***** simplest positive case
+        compiler->Clear();
+        testState = string() +
+            "split([?Head | ?Tail], ?Head, ?Tail). "
+            "goals(split([a, b, c, d], ?Head, ?Tail)).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?Tail = [b,c,d], ?Head = a))");
+
+        // ***** classic list rule: member/2
+        compiler->Clear();
+        testState = string() +
+            "member(?X, [?X|_]).        % member(X, [Head|Tail]) is true if X = Head \r\n"
+            "                         % that is, if X is the head of the list\r\n"
+            "member(?X, [_|?Tail]) :-   % or if X is a member of Tail,\r\n"
+            "  member(?X, ?Tail).       % ie. if member(X, Tail) is true.\r\n"
+            "goals( member(a, [b, c, a, [d, e, f]]), not(member(d, [b, c, a, [d, e, f]])) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+
+        // ***** classic list rule: append/3
+        compiler->Clear();
+        testState = string() +
+            "append([], ?Ys, ?Ys)."
+            "append([?X|?Xs], ?Ys, [?X|?Zs]) :- append(?Xs, ?Ys, ?Zs)."
+            "goals( append(?ListLeft, ?ListRight, [a, b, c]) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?ListRight = [a,b,c], ?ListLeft = []), (?ListLeft = [a], ?ListRight = [b,c]), (?ListLeft = [a,b], ?ListRight = [c]), (?ListLeft = [a,b,c], ?ListRight = []))");
+
+        // ***** classic list rule: reverse/2
+        compiler->Clear();
+        testState = string() +
+        "append([], ?Ys, ?Ys)."
+        "append([?X|?Xs], ?Ys, [?X|?Zs]) :- append(?Xs, ?Ys, ?Zs)."
+        "reverse([],[])."
+        "reverse([?X|?Xs],?YsX) :- reverse(?Xs,?Ys), append(?Ys,[?X],?YsX)."
+        "goals( reverse([a, b, foo(a, [a, b, c])], ?X) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = [foo(a,[a,b,c]),b,a]))");
+
+        // ***** class list rule: Len
+        compiler->Clear();
+        testState = string() +
+        "len([], 0).\r\n"
+        "len([_ | ?Tail], ?Length) :-\r\n"
+        "    len(?Tail, ?Length1),\r\n"
+        "    is(?Length, +(?Length1, 1)),!.\r\n"
+        "goals( len([[], b, foo(a, [a, b, c])], ?X) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = 3))");
+
+    }
+
+    TEST(HtnGoalResolverAtomCharsTests)
+    {
+        HtnGoalResolver resolver;
+        shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+        shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+        shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+        string testState;
+        string goals;
+        string finalUnifier;
+        shared_ptr<vector<UnifierType>> unifier;
+
+        //        SetTraceFilter((int) SystemTraceType::Planner | (int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+
+        // ***** single atom_chars() goal that succeeds: variable on right
+        // with unifiers on left and right to make sure they flow
+        compiler->Clear();
+        testState = string() +
+            "goals(=(?X, pre), atom_chars(foo, ?List), =(?Y, ?X), =(?Z, ?List) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = pre, ?List = [f,o,o], ?Y = pre, ?Z = [f,o,o]))");
+        
+        // ***** single atom_chars() goal that succeeds: variable on left
+        // with unifiers on left and right to make sure they flow
+        compiler->Clear();
+        testState = string() +
+            "goals(=(?X, pre), atom_chars(?List, [f, o, o]), =(?Y, ?X), =(?Z, ?List) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = pre, ?List = foo, ?Y = pre, ?Z = foo))");
+        
+        // ***** single atom_chars() goal that succeeds: more advanced case
+        // with unifiers on left and right to make sure they flow
+        compiler->Clear();
+        testState = string() +
+            "goals(=(?X, pre), atom_chars(foo, [?FirstChar | _]), =(?Y, ?X), =(?Z, ?FirstChar) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = pre, ?FirstChar = f, ?Y = pre, ?Z = f))");
+    }
     
+    TEST(HtnGoalResolverAtomDowncaseTests)
+    {
+        HtnGoalResolver resolver;
+        shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+        shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+        shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+        string testState;
+        string goals;
+        string finalUnifier;
+        shared_ptr<vector<UnifierType>> unifier;
+
+        //        SetTraceFilter((int) SystemTraceType::Planner | (int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+
+        // ***** single downcase_atom() goal that succeeds
+        compiler->Clear();
+        testState = string() +
+            "goals(downcase_atom('THIS IS A TEST', ?x) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?x = this is a test))");
+
+        // ***** single downcase_atom() goal that is preceeded and succeeded by more goals to make sure unifiers flow through properly
+        compiler->Clear();
+        testState = string() +
+            "letter(C). letter(B). letter(A).\r\n" +
+            "capital(c). capital(b). capital(a).\r\n" +
+            "cost(c, 1). cost(ab, 2). cost(a, 3).\r\n" +
+            "highCost(3).\r\n" +
+            "trace(?x) :- .\r\n"
+            "goals( letter(?X), downcase_atom(?X, ?Y), cost(?Y, ?Cost) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = C, ?Y = c, ?Cost = 1), (?X = A, ?Y = a, ?Cost = 3))");
+    }
+
+    TEST(HtnGoalResolverAtomConcatTests)
+    {
+        HtnGoalResolver resolver;
+        shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+        shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+        shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+        string testState;
+        string goals;
+        string finalUnifier;
+        shared_ptr<vector<UnifierType>> unifier;
+
+        //        SetTraceFilter((int) SystemTraceType::Planner | (int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+
+        // ***** single atom_concat() goal that succeeds
+        compiler->Clear();
+        testState = string() +
+            "goals(atom_concat(a, b, ?x) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?x = ab))");
+
+        // ***** single atom_concat() goal that is preceeded and succeeded by more goals to make sure unifiers flow through properly
+        compiler->Clear();
+        testState = string() +
+            "letter(c). letter(b). letter(a).\r\n" +
+            "capital(c). capital(b). capital(a).\r\n" +
+            "cost(c, 1). cost(ab, 2). cost(a, 3).\r\n" +
+            "highCost(3).\r\n" +
+            "trace(?x) :- .\r\n"
+            "goals( letter(?X), atom_concat(?X, b, ?Y), cost(?Y, ?Cost) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = a, ?Y = ab, ?Cost = 2))");
+    }
+
     TEST(HtnGoalResolverWriteTests)
     {
         HtnGoalResolver resolver;
@@ -502,7 +801,7 @@ SUITE(HtnGoalResolverTests)
         // ***** Make sure string literals work
         compiler->Clear();
         testState = string() +
-        "goals( write(\"Test 'of the emergency'\") ).\r\n";
+        "goals( write('Test \"of the emergency\"') ).\r\n";
         CHECK(compiler->Compile(testState));
         
         // Redirect cout to catch output
@@ -513,7 +812,7 @@ SUITE(HtnGoalResolverTests)
         unifier = compiler->SolveGoals();
         finalUnifier = HtnGoalResolver::ToString(unifier.get());
         CHECK_EQUAL(finalUnifier, "(())");
-        CHECK_EQUAL(out.str(), "Test 'of the emergency'");
+        CHECK_EQUAL(out.str(), "Test \"of the emergency\"");
         std::cout.rdbuf(coutbuf); //reset to standard output again
         
         // ***** Make sure nl works
@@ -538,7 +837,7 @@ SUITE(HtnGoalResolverTests)
         // ***** Make sure writeln works
         compiler->Clear();
         testState = string() +
-        "goals( writeln(\"test\") ).\r\n";
+        "goals( writeln('test') ).\r\n";
         CHECK(compiler->Compile(testState));
         
         // Redirect cout to catch output
@@ -570,7 +869,7 @@ SUITE(HtnGoalResolverTests)
         unifier = compiler->SolveGoals();
         finalUnifier = HtnGoalResolver::ToString(unifier.get());
         CHECK_EQUAL(finalUnifier, "(())");
-        CHECK_EQUAL(out.str(), "itemsInBag(?X)");
+        CHECK_EQUAL(out.str(), "itemsInBag(?orig*X)");
         std::cout.rdbuf(coutbuf); //reset to standard output again
     }
     
@@ -599,7 +898,7 @@ SUITE(HtnGoalResolverTests)
         finalUnifier = HtnGoalResolver::ToString(unifier.get());
         CHECK_EQUAL(finalUnifier, "((?X = Name1))");
 
-		// ***** Make sure the same variables get mapped to the same renamed variables 
+		// ***** Make sure the same variables get mapped to the same renamed variables
 		compiler->Clear();
 		testState = string() +
 			"itemsInBag(Name1, Name1). \r\n" +
@@ -609,7 +908,7 @@ SUITE(HtnGoalResolverTests)
 		unifier = compiler->SolveGoals();
 		finalUnifier = HtnGoalResolver::ToString(unifier.get());
 		CHECK_EQUAL(finalUnifier, "((?X = Name1))");
-	
+
 		// ***** dontcare variables match anything and aren't returned
 		compiler->Clear();
 		testState = string() +
@@ -645,6 +944,52 @@ SUITE(HtnGoalResolverTests)
         unifier = compiler->SolveGoals();
         finalUnifier = HtnGoalResolver::ToString(unifier.get());
         CHECK_EQUAL(finalUnifier, "((), ())");
+
+        // Rules with don't care variables should be matched by goals with anything
+        compiler->Clear();
+        testState = string() +
+            "test(_, _). \r\n" +
+            "goals( test(a, b) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL("(())", finalUnifier);
+
+        // Once a variable is renamed it shouldn't be again
+        compiler->Clear();
+        testState = string() +
+        "valid(a, b)."
+        "valid(a, c)."
+        "valid(b, c)."
+        "test(?X, ?Y) :- valid(?X, ?Y), test2(?X, ?Y)."
+        "test2(?X, ?Y) :- valid(?X, b)."
+        "goals( test(_, ?X) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL("((?X = b), (?X = c))", finalUnifier);
+        
+        // Rules with don't care variables should be matched by goals with don't care variables
+        compiler->Clear();
+        testState = string() +
+            "test(_, _) :- test2(_, _). \r\n" +
+            "test2(_, _). \r\n" +
+            "goals( test(_, _) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL("(())", finalUnifier);
+//
+        // Rules with don't care variables should be matched by goals with anything
+        compiler->Clear();
+        testState = string() +
+            "test(_, _) :- test2(_, _). \r\n" +
+            "test2(_, _). \r\n" +
+            "goals( test(a, b) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL("(())", finalUnifier);
 	}
     
     TEST(HtnGoalResolverForAllTests)
@@ -708,7 +1053,7 @@ SUITE(HtnGoalResolverTests)
         finalUnifier = HtnGoalResolver::ToString(unifier.get());
         CHECK_EQUAL(finalUnifier, "(())");
         expectedOut = std::stringstream();
-        expectedOut << "item(a)" << endl << "item(b)" << endl << "item(?X)" << endl;
+        expectedOut << "item(a)" << endl << "item(b)" << endl << "item(?orig*X)" << endl;
         string temp = out.str();
         CHECK_EQUAL(out.str(), expectedOut.str());
         std::cout.rdbuf(coutbuf); //reset to standard output again
@@ -736,6 +1081,81 @@ SUITE(HtnGoalResolverTests)
         std::cout.rdbuf(coutbuf); //reset to standard output again
     }
     
+    TEST(HtnGoalResolverAtomicTests)
+    {
+        HtnGoalResolver resolver;
+        shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+        shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+        shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+        string testState;
+        string goals;
+        string finalUnifier;
+        shared_ptr<vector<UnifierType>> unifier;
+
+        // ***** atomic(mia). should resolve to true
+        compiler->Clear();
+        testState = string() +
+            "goals(atomic(mia)).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+
+        // ***** atomic(mia()). should resolve to true
+        compiler->Clear();
+        testState = string() +
+            "goals(atomic(mia())).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+
+        // ***** atomic(8). should resolve to true
+        compiler->Clear();
+        testState = string() +
+            "goals(atomic(8)).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+
+        // ***** atomic(3.25). should resolve to true
+        compiler->Clear();
+        testState = string() +
+            "goals(atomic(3.25)).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+
+        // ***** atomic(loves(vincent, mia)). should resolve to false
+        compiler->Clear();
+        testState = string() +
+            "goals(atomic(loves(vincent, mia))).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "null");
+
+        // ***** atomic(?X) (unbound variable) should resolve to False
+        compiler->Clear();
+        testState = string() +
+            "goals(atomic(?X)).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "null");
+
+        // ***** atomic(?X) (bound variable) should resolve to True
+        compiler->Clear();
+        testState = string() +
+            "goals(=(?X, mia), atomic(?X)).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = mia))");
+    }
+
     TEST(HtnGoalResolverTrueFalseTests)
     {
         HtnGoalResolver resolver;
@@ -998,6 +1418,146 @@ SUITE(HtnGoalResolverTests)
 		//CHECK_EQUAL(finalUnifier, "((?After = Name2))");
 	}
 
+
+    TEST(HtnGoalResolverFindAllTests)
+    {
+        HtnGoalResolver resolver;
+        shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+        shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+        shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+        string testState;
+        string goals;
+        string finalUnifier;
+        shared_ptr<vector<UnifierType>> unifier;
+        
+//                SetTraceFilter((int) SystemTraceType::Planner | (int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+
+        // ***** if there are no solutions, we get an empty list
+        compiler->Clear();
+        testState = string() +
+        "child(martha,charlotte)."
+        "child(charlotte,caroline)."
+        "child(caroline,laura)."
+        "child(laura,rose)."
+        "descend(?X,?Y)  :-  child(?X,?Y)."
+        "descend(?X,?Y)  :-  child(?X,?Z),"
+        "                    descend(?Z,?Y)."
+        "trace(?x) :- .\r\n"
+        "goals( findall(?X,descend(rose,?X),?Z) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?Z = []))");
+
+        // ***** simple single variable scenario with solutions and an extra goal to make sure
+        // unifiers flow
+        compiler->Clear();
+        testState = string() +
+        "child(martha,charlotte)."
+        "child(charlotte,caroline)."
+        "child(caroline,laura)."
+        "child(laura,rose)."
+        "descend(?X,?Y)  :-  child(?X,?Y)."
+        "descend(?X,?Y)  :-  child(?X,?Z),"
+        "                    descend(?Z,?Y)."
+        "trace(?x) :- .\r\n"
+        "goals( child(charlotte, ?A), findall(?X,descend(martha,?X),?Z), child(?A, ?B) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?A = caroline, ?Z = [charlotte,caroline,laura,rose], ?B = laura))");
+
+        // ***** complex template single variable scenario that succeeds
+        compiler->Clear();
+        testState = string() +
+        "child(martha,charlotte)."
+        "child(charlotte,caroline)."
+        "child(caroline,laura)."
+        "child(laura,rose)."
+        "descend(?X,?Y)  :-  child(?X,?Y)."
+        "descend(?X,?Y)  :-  child(?X,?Z),"
+        "                    descend(?Z,?Y)."
+        "trace(?x) :- .\r\n"
+        "goals( findall(fromMartha(?X),descend(martha,?X),?Z) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?Z = [fromMartha(charlotte),fromMartha(caroline),fromMartha(laura),fromMartha(rose)]))");
+
+        // ***** simple template multi variable scenario that succeeds
+        compiler->Clear();
+        testState = string() +
+        "child(martha,charlotte)."
+        "child(charlotte,caroline)."
+        "child(caroline,laura)."
+        "child(laura,rose)."
+        "descend(?X,?Y)  :-  child(?X,?Y)."
+        "descend(?X,?Y)  :-  child(?X,?Z),"
+        "                    descend(?Z,?Y)."
+        "trace(?x) :- .\r\n"
+        "goals( findall(?X,descend(?X,?Y),?Z) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?Z = [martha,charlotte,caroline,laura,martha,martha,martha,charlotte,charlotte,caroline]))");
+
+        
+        // ***** last argument should be unified with
+        compiler->Clear();
+        testState = string() +
+        "child(martha,charlotte)."
+        "child(charlotte,caroline)."
+        "child(caroline,laura)."
+        "child(laura,rose)."
+        "descend(?X,?Y)  :-  child(?X,?Y)."
+        "descend(?X,?Y)  :-  child(?X,?Z),"
+        "                    descend(?Z,?Y)."
+        "trace(?x) :- .\r\n"
+        "goals( findall(?X,descend(laura,?X),[?Z]) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?Z = rose))");
+        
+        // ***** scenario
+        // from: https://www.cpp.edu/~jrfisher/www/prolog_tutorial/2_15.html
+        compiler->Clear();
+        testState = string() +
+        "edge(1,2)."
+        "edge(1,4)."
+        "edge(1,3)."
+        "edge(2,3)."
+        "edge(2,5)."
+        "edge(3,4)."
+        "edge(3,5)."
+        "edge(4,5)."
+        "member(?X, [?X|_])."
+        "member(?X, [_|?Tail]) :-"
+        "  member(?X, ?Tail)."
+        "reverse([],[])."
+        "reverse([?X|?Xs],?YsX) :- reverse(?Xs,?Ys), append(?Ys,[?X],?YsX)."
+        "append([], ?Ys, ?Ys)."
+        "append([?X|?Xs], ?Ys, [?X|?Zs]) :- append(?Xs, ?Ys, ?Zs)."
+        "path(?A,?B,?Path) :-"
+        "       travel(?A,?B,[?A],?Q),"
+        "       reverse(?Q,?Path)."
+        "connected(?X,?Y) :- edge(?X,?Y)."
+        "connected(?X,?Y) :- edge(?Y,?X)."
+        "travel(?A,?B,?P,[?B|?P]) :-"
+        "       connected(?A,?B)."
+        "travel(?A,?B,?Visited,?Path) :-"
+        "       connected(?A,?C),"
+        "       \\==(?C, ?B),"
+        "       not(member(?C,?Visited)),"
+        "       travel(?C,?B,[?C|?Visited],?Path).";
+        goals = "goals( path(1, 2, ?Path) ).\r\n";
+        CHECK(compiler->Compile(testState + goals));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?Path = [1,2]), (?Path = [1,4,5,2]), (?Path = [1,4,5,3,2]), (?Path = [1,4,3,2]), (?Path = [1,4,3,5,2]), (?Path = [1,3,2]), (?Path = [1,3,4,5,2]), (?Path = [1,3,5,2]))");
+    }
+        
     TEST(HtnGoalResolverMinTests)
     {
         HtnGoalResolver resolver;
@@ -1156,7 +1716,7 @@ SUITE(HtnGoalResolverTests)
         shared_ptr<vector<UnifierType>> unifier;
         
         //        SetTraceFilter((int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
-        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
         
         // ***** single sum() goal where all terms fail
         compiler->Clear();
@@ -1217,6 +1777,78 @@ SUITE(HtnGoalResolverTests)
         CHECK_EQUAL(finalUnifier, "((?X = 1, ?Total = 3, ?Name = One))");
     }
     
+    TEST(HtnGoalResolverDistinctTests)
+    {
+        HtnGoalResolver resolver;
+        shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+        shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+        shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+        string testState;
+        string goals;
+        string finalUnifier;
+        shared_ptr<vector<UnifierType>> unifier;
+        
+        //        SetTraceFilter((int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+
+        // ***** no variables, no domain
+        compiler->Clear();
+        testState = string() +
+        "letter(c). letter(b). letter(a).\r\n"
+        "test(_) :- letter(_).\r\n"
+        "trace(?x) :- .\r\n"
+        "goals( distinct(_, test(_)) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+        
+        // ***** single variable, no domain
+        compiler->Clear();
+        testState = string() +
+        "letter(c). letter(b). letter(a).\r\n" +
+        "trace(?x) :- .\r\n"
+        "goals( distinct(_, letter(?X)) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = c), (?X = b), (?X = a))");
+        
+        // ***** multiple variables, no domain
+        compiler->Clear();
+        testState = string() +
+        "letter(c). letter(b). letter(a).\r\n" +
+        "trace(?x) :- .\r\n"
+        "goals( distinct(_, letter(?X), letter(?Y)) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = c, ?Y = c), (?X = c, ?Y = b), (?X = c, ?Y = a), (?X = b, ?Y = c), (?X = b, ?Y = b), (?X = b, ?Y = a), (?X = a, ?Y = c), (?X = a, ?Y = b), (?X = a, ?Y = a))");
+    
+        // ***** single variable, with domain
+        compiler->Clear();
+        testState = string() +
+        "letter(c). letter(b). letter(a).\r\n" +
+        "trace(?x) :- .\r\n"
+        "goals( distinct(?X, letter(?X)) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = c), (?X = b), (?X = a))");
+        
+        // ***** multiple variables (one unbound), with domain
+        // which unbound gets chosen is indeterminate
+        compiler->Clear();
+        testState = string() +
+        "letter(c). letter(b). letter(a).\r\n" +
+        "trace(?x) :- .\r\n"
+        "goals( distinct(?X, letter(?X), letter(?Y)) ).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = c, ?Y = c), (?X = b, ?Y = c), (?X = a, ?Y = c))");
+    }
+    
     TEST(HtnGoalResolverCountTests)
     {
         HtnGoalResolver resolver;
@@ -1229,7 +1861,7 @@ SUITE(HtnGoalResolverTests)
         shared_ptr<vector<UnifierType>> unifier;
         
         //        SetTraceFilter((int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
-        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
         
         // ***** single count() goal where all items fail
         compiler->Clear();
@@ -1297,7 +1929,7 @@ SUITE(HtnGoalResolverTests)
         shared_ptr<vector<UnifierType>> unifier;
         
         //        SetTraceFilter((int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
-        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
         
         // ***** single sortBy() goal where all items fail
         compiler->Clear();
@@ -1454,6 +2086,91 @@ SUITE(HtnGoalResolverTests)
         CHECK_EQUAL(finalUnifier, "((?Capital = A, ?Combo = ComboA))");
     }
     
+    TEST(HtnGoalResolverIsTests)
+    {
+        HtnGoalResolver resolver;
+        shared_ptr<HtnTermFactory> factory = shared_ptr<HtnTermFactory>(new HtnTermFactory());
+        shared_ptr<HtnRuleSet> state = shared_ptr<HtnRuleSet>(new HtnRuleSet());
+        shared_ptr<PrologCompiler> compiler = shared_ptr<PrologCompiler>(new PrologCompiler(factory.get(), state.get()));
+        string testState;
+        string goals;
+        string finalUnifier;
+        shared_ptr<vector<UnifierType>> unifier;
+        
+        //        SetTraceFilter((int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+        
+        // ***** is/2 with two arithmetic arguments succeeds
+        compiler->Clear();
+        testState = string() +
+        "goals(is(1, 1)).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+
+        compiler->Clear();
+        testState = string() +
+        "goals(is(+(1, 1), +(0, 2))).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "(())");
+
+        // ***** is/2 with variable lvalue and arithmetic argument unifies
+        compiler->Clear();
+        testState = string() +
+        "goals(is(?X, 1)).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = 1))");
+
+        compiler->Clear();
+        testState = string() +
+        "goals(is(?X, +(1,2))).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = 3))");
+
+        // ***** is/2 with variable lvalue that has been set and arithmetic argument works
+        compiler->Clear();
+        testState = string() +
+        "goals(=(?X, 5), is(?X, 5)).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "((?X = 5))");
+        
+        // ***** is/2 with variable lvalue that has been set with non-arithmetic term and arithmetic argument fails
+        // but doesn't throw
+        compiler->Clear();
+        testState = string() +
+        "goals(=(?X, a), is(?X, 5)).\r\n";
+        CHECK(compiler->Compile(testState));
+        unifier = compiler->SolveGoals();
+        finalUnifier = HtnGoalResolver::ToString(unifier.get());
+        CHECK_EQUAL(finalUnifier, "null");
+
+        // ***** is/2 with non-arithmetic arguments throws
+        bool caught = false;
+        try {
+            compiler->Clear();
+            testState = string() +
+            "goals(is(b, b)).\r\n";
+            CHECK(compiler->Compile(testState));
+            unifier = compiler->SolveGoals();
+            finalUnifier = HtnGoalResolver::ToString(unifier.get());
+            CHECK_EQUAL(finalUnifier, "null");
+        }
+        catch(...)
+        {
+            caught = true;
+        }
+        CHECK(caught);
+    }
+    
     TEST(HtnGoalResolverNotTests)
     {
         HtnGoalResolver resolver;
@@ -1466,7 +2183,7 @@ SUITE(HtnGoalResolverTests)
         shared_ptr<vector<UnifierType>> unifier;
         
         //        SetTraceFilter((int)SystemTraceType::Solver | (int) SystemTraceType::Unifier,  TraceDetail::Diagnostic);
-        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
+//        SetTraceFilter( (int)SystemTraceType::Solver,  TraceDetail::Diagnostic);
         
         // ***** single not() goal that fails
         compiler->Clear();

@@ -16,6 +16,8 @@ namespace Prolog
     class HtnVariable;
     template<class VariableRule = HtnVariable>
     class PrologFunctor;
+    template<class VariableRule = HtnVariable>
+    class PrologList;
     
     // Errors
     extern char PrologAtomError[];
@@ -23,15 +25,18 @@ namespace Prolog
     extern char PrologTermError[];
     extern char PrologFunctorError[];
     extern char PrologFunctorListError[];
+    extern char PrologListError[];
     extern char PrologRuleError[];
     extern char PrologTermListError[];
     extern char PrologDocumentError[];
     extern char PrologCommentError[];
     extern char PrologQueryError[];
+    extern char PrologTailTermError[];
 
 	extern char BeginCommentBlock[];
     extern char CrlfString[];
 	extern char CapitalChar[];
+    extern char emptyList[];
 	extern char EndCommentBlock[];
 
     class PrologSymbolID
@@ -45,9 +50,12 @@ namespace Prolog
         SymbolDef(PrologDocument, CustomSymbolStart + 5);
         SymbolDef(PrologComment, CustomSymbolStart + 6);
 		SymbolDef(PrologQuery, CustomSymbolStart + 7);
+        SymbolDef(PrologList, CustomSymbolStart + 8);
+        SymbolDef(PrologEmptyList, CustomSymbolStart + 9);
+        SymbolDef(PrologTailTerm, CustomSymbolStart + 10);
 
         // Must be last so that other parsers can extend
-        SymbolDef(PrologMaxSymbol, CustomSymbolStart + 8);
+        SymbolDef(PrologMaxSymbol, CustomSymbolStart + 11);
     };
 
     //    a comment starts with % and can have anything after it until it hits a group of newline, carriage returns in any order and in any number
@@ -59,7 +67,11 @@ namespace Prolog
 			<
 				CharacterSymbol<PercentString, FlattenType::None>,
 				ZeroOrMoreExpression<CharacterSetExceptSymbol<CrlfString>>,
-				OneOrMoreExpression<CharacterSetSymbol<CrlfString>>
+                OrExpression<Args
+                <
+    				OneOrMoreExpression<CharacterSetSymbol<CrlfString>>,
+                    EofSymbol
+                >>
 			>>,
 			AndExpression<Args
 			<
@@ -100,12 +112,21 @@ namespace Prolog
 			CharacterSymbol<ExclamationPointString, FlattenType::None>,
             AndExpression<Args
             <
-				CharacterSymbol<DoubleQuoteString>,
+                CharacterSymbol<DoubleQuoteString, FlattenType::None>,
+                ZeroOrMoreExpression
+                <
+                    CharacterSetExceptSymbol<DoubleQuoteString>
+                >,
+                CharacterSymbol<DoubleQuoteString, FlattenType::None>
+            >>,
+            AndExpression<Args
+            <
+				CharacterSymbol<SingleQuoteString>,
 				ZeroOrMoreExpression
 				<
-					CharacterSetExceptSymbol<DoubleQuoteString>
+					CharacterSetExceptSymbol<SingleQuoteString>
 				>,
-				CharacterSymbol<DoubleQuoteString>
+				CharacterSymbol<SingleQuoteString>
 			>>,
             AndExpression<Args
             <
@@ -184,13 +205,14 @@ namespace Prolog
     {
     };
 
-    // A term is a variable or functor (which could have no arguments and thus be an atom)
+    // A term is a variable or functor (which could have no arguments and thus be an atom) or a list
     template<class VariableRule = HtnVariable>
     class PrologTerm : public
     OrExpression<Args
     <
         PrologVariable<VariableRule>,
-        PrologFunctor<VariableRule>
+        PrologFunctor<VariableRule>,
+        PrologList<VariableRule>
     >, FlattenType::Flatten, 0, PrologTermError>
     {
     };
@@ -214,13 +236,14 @@ namespace Prolog
     >, FlattenType::Flatten, SymbolID::andExpression, PrologFunctorListError>
     {
     };
-
+    
     template<class VariableRule = HtnVariable>
     class PrologTermList : public
     AndExpression<Args
     <
         PrologTerm<VariableRule>,
         PrologOptionalWhitespace,
+        // zero or more terms with commas
         ZeroOrMoreExpression
         <
             AndExpression<Args
@@ -230,11 +253,40 @@ namespace Prolog
                 PrologTerm<VariableRule>,
                 PrologOptionalWhitespace
             >>
+        >,
+        // Could be followed by | and any single term
+        OptionalExpression
+        <
+            AndExpression<Args
+            <
+                CharacterSymbol<PipeString>,
+                PrologOptionalWhitespace,
+                PrologTerm<VariableRule>,
+                PrologOptionalWhitespace
+            >, FlattenType::None, PrologSymbolID::PrologTailTerm, PrologTermListError>
         >
     >, FlattenType::Flatten, SymbolID::andExpression, PrologTermListError>
     {
     };
     
+    // A list is either the empty list "[]" or
+    // [term, list]
+    template<class VariableRule>
+    class PrologList : public
+    OrExpression<Args
+    <
+        LiteralExpression<emptyList, FlattenType::None, PrologSymbolID::PrologEmptyList>,
+        AndExpression<Args
+        <
+            CharacterSymbol<LeftBracketString>,
+            PrologOptionalWhitespace,
+            PrologTermList<VariableRule>,
+            CharacterSymbol<RightBracketString>
+        >>
+    >, FlattenType::None, PrologSymbolID::PrologList, PrologListError>
+    {
+    };
+
     // A compound term is composed of an atom called a "functor" and a number of "arguments", which are again terms. Compound terms are ordinarily written as a functor
     // followed by a comma-separated list of argument terms, which is contained in parentheses. The number of arguments is called the term's arity. An atom can be regarded
     // as a compound term with arity zero.
@@ -248,8 +300,6 @@ namespace Prolog
                 NotPeekExpression<VariableRule>,
                 PrologAtom
             >>
-            // Special case the period string since it is used for lists i.e. .()
-//            CharacterSymbol<PeriodString>
         >>,
         OptionalExpression
         <
@@ -312,7 +362,8 @@ namespace Prolog
                 PrologOptionalWhitespace,
                 OrExpression<Args<
                     PrologRule<VariableRule>,
-                    PrologFunctor<VariableRule>
+                    PrologFunctor<VariableRule>,
+                    PrologList<VariableRule>
                 >>,
                 PrologOptionalWhitespace,
                 CharacterSymbol<PeriodString>,

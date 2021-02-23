@@ -87,7 +87,7 @@ int64_t HtnTerm::dynamicSize()
 shared_ptr<HtnTerm> HtnTerm::Eval(HtnTermFactory *factory)
 {
     // Make sure we are not intermixing terms from different factories
-    FailFastAssert(this->m_factory.lock().get() == factory);
+    FXDebugAssert(this->m_factory.lock().get() == factory);
 
     if(isVariable())
     {
@@ -120,7 +120,7 @@ shared_ptr<HtnTerm> HtnTerm::Eval(HtnTermFactory *factory)
             else if(*m_namePtr == "=>")
             {
                 // Avoid common error that is really confusing.  Prolog uses >=
-                FailFastAssert(false);
+                FailFastAssertDesc(false, "=> is incorrect in Prolog.  Use >=");
                 return nullptr;
             }
             else if(*m_namePtr == ">=")
@@ -134,7 +134,7 @@ shared_ptr<HtnTerm> HtnTerm::Eval(HtnTermFactory *factory)
             else if(*m_namePtr == "<=")
             {
                 // Avoid common error that is really confusing.  Prolog uses =<
-                FailFastAssert(false);
+                FailFastAssertDesc(false, "<= is incorrect in Prolog. Use =<");
                 return nullptr;
             }
             else if(*m_namePtr == "=<")
@@ -226,7 +226,7 @@ bool HtnTerm::isArithmetic() const
     else if(*m_namePtr == "=>" || *m_namePtr == "<=")
     {
         // Avoid really common issues
-        FailFastAssert(false);
+        FailFastAssertDesc(false, "Incorrect symbol. Prolog uses >= and =<.");
         return false;
     }
     else
@@ -370,7 +370,6 @@ public:
 // Structure is:
 // string *count - number of string *s. This is a fake string * that is really a count
 // string *[] - one string * for every term that points to its name, followed by a set of fake string *s that are from the StructureBuilder that represent the shape of the term
-//
 void HtnTerm::GetUniqueID(const string **buffer, const string **bufferEnd) const
 {
     StructureBuilder shape;
@@ -379,12 +378,12 @@ void HtnTerm::GetUniqueID(const string **buffer, const string **bufferEnd) const
     // first pointer value is actually the length
     const string **origBuffer = buffer;
     buffer++;
-    if(buffer == bufferEnd) StaticFailFastAssert(false);
+    if(buffer == bufferEnd) StaticFailFastAssertDesc(false, ("Too many terms, max = " + lexical_cast<string>(HtnTermFactory::MaxIndexTerms)).c_str());
     
     // Do the root
     *buffer = m_namePtr;
     buffer++;
-    if(buffer == bufferEnd) StaticFailFastAssert(false);
+    if(buffer == bufferEnd) StaticFailFastAssertDesc(false, ("Too many terms, max = " + lexical_cast<string>(HtnTermFactory::MaxIndexTerms)).c_str());
     
     if(m_arguments.size() > 0)
     {
@@ -406,7 +405,7 @@ void HtnTerm::GetUniqueID(const string **buffer, const string **bufferEnd) const
                 // Add this child's name
                 *buffer = next->m_namePtr;
                 buffer++;
-                if(buffer == bufferEnd) StaticFailFastAssert(false);
+                if(buffer == bufferEnd) StaticFailFastAssertDesc(false, ("Too many terms, max = " + lexical_cast<string>(HtnTermFactory::MaxIndexTerms)).c_str());
                 
                 if(next->m_arguments.size() > 0)
                 {
@@ -430,7 +429,7 @@ void HtnTerm::GetUniqueID(const string **buffer, const string **bufferEnd) const
     {
         *buffer = reinterpret_cast<string *>(data);
         buffer++;
-        if(buffer == bufferEnd) StaticFailFastAssertDesc(false, "Too many terms!");
+        if(buffer == bufferEnd) StaticFailFastAssertDesc(false, ("Too many terms, max = " + lexical_cast<string>(HtnTermFactory::MaxIndexTerms)).c_str());
     }
     
     // Put the size as the first "pointer"
@@ -447,28 +446,35 @@ HtnTerm::HtnTermID HtnTerm::GetUniqueID() const
     return reinterpret_cast<HtnTermID>(this);
 }
 
-shared_ptr<HtnTerm> HtnTerm::MakeVariablesUnique(HtnTermFactory *factory, bool onlyDontCareVariables, const string &uniquifier, int *dontCareCount)
+shared_ptr<HtnTerm> HtnTerm::MakeVariablesUnique(HtnTermFactory *factory, bool onlyDontCareVariables, const string &uniquifier, int *dontCareCount, std::map<std::string, std::shared_ptr<HtnTerm>> &variableMap)
 {
     // Make sure we are not intermixing terms from different factories
-    FailFastAssert(factory != nullptr && this->m_factory.lock().get() == factory);
-
+    // Too expensive to have in retail
+    FXDebugAssert(factory != nullptr && this->m_factory.lock().get() == factory);
+    
     if(this->isVariable())
     {
-		if(this->name() == "_")
-		{
-			// These cannot match each other so they can't use the same uniquifier
-			shared_ptr<HtnTerm> result = factory->CreateVariable(uniquifier + name() + lexical_cast<string>(*dontCareCount));
-			(*dontCareCount) = (*dontCareCount) + 1;
-			return result;
-		}
+        const string &variableName = this->name();
+        if(variableName[0] == '_')
+        {
+            // These cannot match each other so they can't use the same uniquifier
+            // make sure they continue to start with "_" (illegal for a prolog name) so we can tell if they
+            // are anonymous in rules
+            shared_ptr<HtnTerm> result = factory->CreateVariable("_" + uniquifier + variableName + lexical_cast<std::string>(*dontCareCount));
+            variableMap[variableName] = result;
+            (*dontCareCount) = (*dontCareCount) + 1;
+            return result;
+        }
         else if(onlyDontCareVariables)
         {
             return this->shared_from_this();
         }
-		else
-		{
-			return factory->CreateVariable(uniquifier + name());
-		}
+        else
+        {
+            shared_ptr<HtnTerm> newVariable = factory->CreateVariable(uniquifier + variableName);
+            variableMap[variableName] = newVariable;
+            return newVariable;
+        }
     }
     else if(this->isConstant())
     {
@@ -481,7 +487,7 @@ shared_ptr<HtnTerm> HtnTerm::MakeVariablesUnique(HtnTermFactory *factory, bool o
         for(vector<shared_ptr<HtnTerm>>::const_iterator argIter = m_arguments.begin(); argIter != m_arguments.end(); ++argIter)
         {
             shared_ptr<HtnTerm> term = *argIter;
-            newArguments.push_back(term->MakeVariablesUnique(factory, false, uniquifier, dontCareCount));
+            newArguments.push_back(term->MakeVariablesUnique(factory, onlyDontCareVariables, uniquifier, dontCareCount, variableMap));
         }
         
         return factory->CreateFunctor(*m_namePtr, newArguments);
@@ -491,7 +497,7 @@ shared_ptr<HtnTerm> HtnTerm::MakeVariablesUnique(HtnTermFactory *factory, bool o
 bool HtnTerm::OccursCheck(shared_ptr<HtnTerm> variable) const
 {
     // Make sure we are not intermixing terms from different factories
-    FailFastAssert(this->m_factory.lock() == variable->m_factory.lock());
+    FXDebugAssert(this->m_factory.lock() == variable->m_factory.lock());
 
     if(isVariable() && *this == *variable)
     {
@@ -514,11 +520,16 @@ bool HtnTerm::OccursCheck(shared_ptr<HtnTerm> variable) const
 bool HtnTerm::operator==(const HtnTerm &other) const
 {
     // Make sure we are not intermixing terms from different factories
-    FailFastAssert(this->m_factory.lock() == other.m_factory.lock());
+    FXDebugAssert(this->m_factory.lock() == other.m_factory.lock());
 
     if(m_isVariable == other.m_isVariable &&
        m_namePtr == other.m_namePtr)
     {
+        if(m_isVariable)
+        {
+            return true;
+        }
+        
         if(m_arguments.size() != other.m_arguments.size())
         {
             return false;
@@ -540,10 +551,82 @@ bool HtnTerm::operator==(const HtnTerm &other) const
     }
 }
 
+shared_ptr<HtnTerm> HtnTerm::RemovePrefixFromVariables(HtnTermFactory *factory, const string &prefix)
+{
+    // Make sure we are not intermixing terms from different factories
+    // Too expensive to have in retail
+    FXDebugAssert(factory != nullptr && this->m_factory.lock().get() == factory);
+    if(this->isVariable())
+    {
+        const string &variableName = this->name();
+        int pos = (int) variableName.find(prefix);
+        if(pos == 0)
+        {
+             return factory->CreateVariable(variableName.substr(prefix.size()));
+        }
+        else
+        {
+            return this->shared_from_this();
+        }
+    }
+    else if(this->isConstant())
+    {
+        return this->shared_from_this();
+    }
+    else
+    {
+        // This is a functor
+        vector<shared_ptr<HtnTerm>> newArguments;
+        for(vector<shared_ptr<HtnTerm>>::const_iterator argIter = m_arguments.begin(); argIter != m_arguments.end(); ++argIter)
+        {
+            shared_ptr<HtnTerm> term = *argIter;
+            newArguments.push_back(term->RemovePrefixFromVariables(factory, prefix));
+        }
+        
+        return factory->CreateFunctor(*m_namePtr, newArguments);
+    }
+}
+
+shared_ptr<HtnTerm> HtnTerm::RenameVariables(HtnTermFactory *factory, std::map<std::string, std::shared_ptr<HtnTerm>> variableMap)
+{
+    // Make sure we are not intermixing terms from different factories
+    // Too expensive to have in retail
+    FXDebugAssert(factory != nullptr && this->m_factory.lock().get() == factory);
+    if(this->isVariable())
+    {
+        const string &variableName = this->name();
+        auto found = variableMap.find(variableName);
+        if(found != variableMap.end())
+        {
+            return found->second;
+        }
+        else
+        {
+            return this->shared_from_this();
+        }
+    }
+    else if(this->isConstant())
+    {
+        return this->shared_from_this();
+    }
+    else
+    {
+        // This is a functor
+        vector<shared_ptr<HtnTerm>> newArguments;
+        for(vector<shared_ptr<HtnTerm>>::const_iterator argIter = m_arguments.begin(); argIter != m_arguments.end(); ++argIter)
+        {
+            shared_ptr<HtnTerm> term = *argIter;
+            newArguments.push_back(term->RenameVariables(factory, variableMap));
+        }
+        
+        return factory->CreateFunctor(*m_namePtr, newArguments);
+    }
+}
+
 shared_ptr<HtnTerm> HtnTerm::ResolveArithmeticTerms(HtnTermFactory *factory)
 {
     // Make sure we are not intermixing terms from different factories
-    FailFastAssert(factory != nullptr && this->m_factory.lock().get() == factory);
+    FXDebugAssert(factory != nullptr && this->m_factory.lock().get() == factory);
 
     if(!isCompoundTerm())
     {
@@ -598,10 +681,12 @@ public:
     HtnTerm *m_term;
 };
 
+
 shared_ptr<HtnTerm> HtnTerm::SubstituteTermForVariable(HtnTermFactory *factory, shared_ptr<HtnTerm> newTerm, shared_ptr<HtnTerm> existingVariable)
 {
     // Make sure we are not intermixing terms from different factories
-    FailFastAssert(this->m_factory.lock().get() == factory && newTerm->m_factory.lock().get() == factory && existingVariable->m_factory.lock().get() == factory);
+    FXDebugAssert(this->m_factory.lock().get() == factory && newTerm->m_factory.lock().get() == factory && existingVariable->m_factory.lock().get() == factory);
+    FXDebugAssert(existingVariable->isVariable());
     
     vector<SubstituteStackFrame> stack;
     stack.push_back(SubstituteStackFrame(this));
@@ -613,7 +698,7 @@ shared_ptr<HtnTerm> HtnTerm::SubstituteTermForVariable(HtnTermFactory *factory, 
         
         if(current.m_term->isVariable())
         {
-            if(*current.m_term == *existingVariable)
+            if(current.m_term->nameEqualTo(*existingVariable))
             {
                 current.m_returnValue = newTerm;
                 last = current;
@@ -657,7 +742,7 @@ shared_ptr<HtnTerm> HtnTerm::SubstituteTermForVariable(HtnTermFactory *factory, 
             else
             {
                 // Should have been a variable, constant or functor...
-                FailFastAssert(false);
+                FXDebugAssert(false);
             }
         }
     }
@@ -676,7 +761,7 @@ shared_ptr<HtnTerm> HtnTerm::SubstituteTermForVariable(HtnTermFactory *factory, 
 int HtnTerm::TermCompare(const HtnTerm &other)
 {
     // Make sure we are not intermixing terms from different factories
-    FailFastAssert(this->m_factory.lock() == other.m_factory.lock());
+    FXDebugAssert(this->m_factory.lock() == other.m_factory.lock());
 
     HtnTermType thisType = GetTermType();
     HtnTermType otherType = other.GetTermType();
@@ -759,56 +844,122 @@ int HtnTerm::TermCompare(const HtnTerm &other)
     }
 }
 
-string HtnTerm::ToString(bool isInList)
+string HtnTerm::ToString(bool isSecondTermInList, bool json)
 {
-        stringstream stream;
-        if(isConstant())
+    stringstream stream;
+    if(isList() && arity() == 0)
+    {
+        // Empty list
+        return "[]";
+    }
+    else if(isConstant() || isVariable())
+    {
+        if (json)
         {
-            stream << *m_namePtr;
-        }
-        else if(isVariable())
-        {
-            stream << *m_namePtr;
-        }
-        else
-        {
-            // If this is a list we handle specially
-            // If a child is ., print out [ and then the child
-            // If the right term is "[]" print out ] at the end
-            // .(a, .(b, []))
-            bool startedList = false;
-            if(*m_namePtr == "." && !isInList)
+            if(isVariable())
             {
-                // This is the start of a list
-                startedList = true;
-                stream << "[";
+                stream << "{\"" << m_namePtr->substr(1) << "\":[]}";
             }
             else
             {
-                stream << *m_namePtr << "(";
+                string test = *m_namePtr;
+                // If it starts with a number and is a legitimate number, don't escape it
+                if(test[0] >= '0' && test[0] <= '9')
+                {
+                    HtnTermType type = GetTermType();
+                    if(type == HtnTermType::IntType || type == HtnTermType::FloatType)
+                    {
+                        stream << "{\"" << test << "\":[]}";
+                    }
+                    else
+                    {
+                        stream << "{\"'" << test << "'\":[]}";
+                    }
+                }
+                else
+                {
+                    // If it starts and ends with a " then it is considered a string and we preserve the quote
+                    if(test[0] == '\"' && test[(int) test.length() - 1] == '\"')
+                    {
+                        stream << "{\"\\\"" << test.substr(1, (int) test.length() - 2) << "\\\"\":[]}";
+                    }
+                    // If it starts with uppercase or _ it must be escaped or it gets confused with a variable
+                    // otherwise we escape anything but A-Z and a-z and _
+                    else if(!(test[0] >= 'a' && test[0] <= 'z') ||
+                       (test.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890_") != string::npos))
+                    {
+                        stream << "{\"'" << test << "'\":[]}";
+                    }
+                    else
+                    {
+                        stream << "{\"" << test << "\":[]}";
+                    }
+                }
             }
-    
-            bool hasArg = false;
-            for(auto arg : m_arguments)
+        }
+        else
+        {
+            stream << *m_namePtr;
+        }
+    }
+    else
+    {
+        // If this is a list we handle specially. Lists are internally formed like this:
+        // .(a, .(b, [])) -> [a, b]
+        //
+        // If we are converting a list to json, we want every term in a json list
+        if(*m_namePtr == "." && m_arguments.size() == 2)
+        {
+            if(!isSecondTermInList)
             {
-                stream << (hasArg ? "," : "") << arg->ToString(startedList);
-                hasArg = true;
+                // This is a top level list or the left side of a list
+                // Which means we are creating a list
+                stream << "[";
             }
-    
-            if(startedList)
+            
+            // Whatever is in the left side is the term for this position in
+            // the list (which could also be a list), just add it
+            stream << m_arguments[0]->ToString(false, json);
+            
+            // The right side either ends the list with [] or continues with
+            // another .()
+            if(m_arguments[1]->name() == "[]")
             {
                 stream << "]";
             }
             else
             {
-                stream << ")";
+                // Continue adding terms
+                stream << "," << m_arguments[1]->ToString(true, json);
             }
         }
-    
-        return stream.str();
+        else
+        {
+            if (json)
+            {
+                stream << "{\"" << *m_namePtr << "\":[";
+            }
+            else
+            {
+                stream << *m_namePtr << "(";
+            }
+            
+
+            bool hasArg = false;
+            for(auto arg : m_arguments)
+            {
+                stream << (hasArg ? "," : "") << arg->ToString(false, json);
+                hasArg = true;
+            }
+
+            stream << (json ? "]}" : ")");
+        }
+    }
+
+    return stream.str();
 }
 
-string HtnTerm::ToString(const vector<shared_ptr<HtnTerm>> &goals, bool surroundWithParenthesis)
+string HtnTerm::ToString(const vector<shared_ptr<HtnTerm>> &goals, bool surroundWithParenthesis, bool json)
 {
     stringstream stream;
     
@@ -816,7 +967,7 @@ string HtnTerm::ToString(const vector<shared_ptr<HtnTerm>> &goals, bool surround
     bool hasItem = false;
     for(auto item : goals)
     {
-        stream << (hasItem ? ", " : "") << item->ToString();
+        stream << (hasItem ? ", " : "") << item->ToString(false, json);
         hasItem = true;
     }
     if(surroundWithParenthesis) { stream << ")"; }
